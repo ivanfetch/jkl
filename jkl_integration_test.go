@@ -13,42 +13,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestListGithubAssetsForTag(t *testing.T) {
-	// NOTE for additional test-cases, octocat/hello-world has 0 releases.
-	t.Parallel()
-	d := jkl.NewDownloader()
-	got, err := d.ListGithubAssetsForTag("ivanfetch/prme", "v0.0.6")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := make([]jkl.GithubAsset, 0)
-	want = append(want,
-		jkl.GithubAsset{
-			Name: "checksums.txt",
-			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905347",
-		},
-		jkl.GithubAsset{
-			Name: "prme_0.0.6_Darwin_x86_64.tar.gz",
-			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905345",
-		},
-		jkl.GithubAsset{
-			Name: "prme_0.0.6_Linux_arm64.tar.gz",
-			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905348",
-		},
-		jkl.GithubAsset{
-			Name: "prme_0.0.6_Linux_x86_64.tar.gz",
-			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905353",
-		},
-		jkl.GithubAsset{
-			Name: "prme_0.0.6_Windows_x86_64.tar.gz",
-			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905349",
-		},
-	)
-	if !cmp.Equal(want, got) {
-		t.Fatalf("want vs. got: %s", cmp.Diff(want, got))
-	}
-}
-
 func TestInstall(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -64,6 +28,13 @@ func TestInstall(t *testing.T) {
 			toolSpec:           "ivanfetch/prme",
 			wantVersion:        "v0.0.6",
 			wantInstalledFiles: []string{"prme/v0.0.6/prme"},
+			wantShims:          []string{"prme"},
+		},
+		{
+			description:        "version v0.0.4 of ivanfetch/prme",
+			toolSpec:           "ivanfetch/prme:0.0.4",
+			wantVersion:        "v0.0.4",
+			wantInstalledFiles: []string{"prme/v0.0.4/prme"},
 			wantShims:          []string{"prme"},
 		},
 	}

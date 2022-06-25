@@ -184,24 +184,37 @@ func (j JKL) RunShim(args []string) error {
 // downloaded, and an optional version.
 func (j JKL) Install(toolSpec string) (installedVersion string, err error) {
 	debugLog.Printf("Installing %s\n", toolSpec)
-	// Eventually the below will be broken into a InstallGithub func, and THIS
-	// func will determine which install-provider to use.
-	var binaryPath, toolVersion string
+	var downloadPath, binaryPath, toolVersion string
 	toolSpecFields := strings.Split(toolSpec, ":")
-	ownerAndRepo := toolSpecFields[0]
+	g, err := NewGithubRepo(toolSpecFields[0])
+	if err != nil {
+		return "", err
+	}
 	if len(toolSpecFields) == 2 && strings.ToLower(toolSpecFields[1]) != "latest" {
-		toolVersion := toolSpecFields[1]
-		binaryPath, err = j.InstallGithubReleaseForVersion(ownerAndRepo, toolVersion)
+		downloadPath, toolVersion, err = g.DownloadReleaseForVersion(toolSpecFields[1])
 	} else {
-		binaryPath, toolVersion, err = j.InstallGithubReleaseForLatest(ownerAndRepo)
+		downloadPath, toolVersion, err = g.DownloadReleaseForLatest()
 	}
 	if err != nil {
 		return "", err
 	}
+	err = ExtractFile(downloadPath)
+	if err != nil {
+		return "", err
+	}
+	toolName := filepath.Base(g.GetOwnerAndRepo())
+	extractedToolBinary := fmt.Sprintf("%s/%s", filepath.Dir(downloadPath), toolName)
+	installDest := fmt.Sprintf("%s/%s/%s", j.installsDir, toolName, toolVersion)
+	err = CopyExecutableToCreatedDir(extractedToolBinary, installDest)
+	if err != nil {
+		return "", err
+	}
+	binaryPath = fmt.Sprintf("%s/%s", installDest, toolName)
 	err = j.createShim(filepath.Base(binaryPath))
 	if err != nil {
 		return "", err
 	}
+	debugLog.Printf("Installed version %q", toolVersion)
 	return toolVersion, nil
 }
 

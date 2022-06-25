@@ -7,12 +7,50 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
 )
+
+type GithubClient struct {
+	token, apiHost string
+	httpClient     *http.Client
+}
+
+// githubClientOption specifies GithubClient options as functions.
+type githubClientOption func(*GithubClient) error
+
+// WithAPIHost sets the Github API hostname for an instance of GithubClient.
+func WithAPIHost(host string) githubClientOption {
+	return func(c *GithubClient) error {
+		c.apiHost = host
+		return nil
+	}
+}
+
+// WithHTTPClient sets a custom net/http.Client for an instance of GithubClient.
+func WithHTTPClient(hc *http.Client) githubClientOption {
+	return func(c *GithubClient) error {
+		c.httpClient = hc
+		return nil
+	}
+}
+
+func NewGithubClient(options ...githubClientOption) (*GithubClient, error) {
+	c := &GithubClient{
+		apiHost:    "https://api.github.com",
+		token:      os.Getenv("GH_TOKEN"),
+		httpClient: &http.Client{Timeout: time.Second * 10},
+	}
+	for _, o := range options {
+		err := o(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
 
 type GithubAsset struct {
 	Name string `json:"name"`
@@ -22,18 +60,6 @@ type GithubAsset struct {
 type GithubReleases []struct {
 	ReleaseName string `json:"name"`
 	TagName     string `json:"tag_name"`
-}
-
-func (g GithubReleases) tagExists(wantTag string) (tag string, found bool) {
-	debugLog.Printf("Looking for tag %q in %d releases\n", wantTag, len(g))
-	for _, r := range g {
-		if strings.EqualFold(r.TagName, wantTag) {
-			debugLog.Printf("found tag %q for release %s\n", r.TagName, r.ReleaseName)
-			return r.TagName, true
-		}
-	}
-	debugLog.Printf("tag %q not found\n", wantTag)
-	return "", false
 }
 
 func (g GithubReleases) tagForReleaseName(wantName string) (tag string, found bool) {
@@ -48,10 +74,10 @@ func (g GithubReleases) tagForReleaseName(wantName string) (tag string, found bo
 	return "", false
 }
 
-func (gr GithubReleases) MatchTagFromPartialVersion(pv string) (tag string, found bool) {
+func (g GithubReleases) MatchTagFromPartialVersion(pv string) (tag string, found bool) {
 	debugLog.Printf("matching tag from partial version %q\n", pv)
-	tags := make([]string, len(gr))
-	for i, j := range gr {
+	tags := make([]string, len(g))
+	for i, j := range g {
 		tags[i] = j.TagName
 	}
 	sort.Strings(tags)
@@ -72,48 +98,89 @@ func (gr GithubReleases) MatchTagFromPartialVersion(pv string) (tag string, foun
 	return "", false
 }
 
-type Downloader struct {
-	githubToken, githubAPIHost string
-	httpClient                 *http.Client
-}
-
-func NewDownloader() *Downloader {
-	return &Downloader{
-		githubAPIHost: "https://api.github.com",
-		githubToken:   os.Getenv("GH_TOKEN"),
-		httpClient:    &http.Client{Timeout: time.Second * 30},
+func (g GithubReleases) tagExists(wantTag string) (tag string, found bool) {
+	debugLog.Printf("Looking for tag %q in %d releases\n", wantTag, len(g))
+	for _, r := range g {
+		if strings.EqualFold(r.TagName, wantTag) {
+			debugLog.Printf("found tag %q for release %s\n", r.TagName, r.ReleaseName)
+			return r.TagName, true
+		}
 	}
+	debugLog.Printf("tag %q not found\n", wantTag)
+	return "", false
 }
 
-func (d *Downloader) githubAPIRequest(method, URI string) (*http.Response, error) {
+type GithubRepo struct {
+	ownerAndRepo string
+	client       *GithubClient
+}
+
+func NewGithubRepo(ownerAndRepo string, clientOptions ...githubClientOption) (*GithubRepo, error) {
+	if ownerAndRepo == "" {
+		return nil, errors.New("the repository cannot be empty, please specify a repository of the form OwnerName/RepositoryName")
+	}
+	if !strings.Contains(ownerAndRepo, "/") {
+		return nil, errors.New("the repository must be of the form OwnerName/RepositoryName")
+	}
+	ownerAndRepo = strings.Replace(ownerAndRepo, "github.com/", "", 1)
+	c, err := NewGithubClient(clientOptions...)
+	if err != nil {
+		return nil, fmt.Errorf("while constructing Github client for repository %s: %w", ownerAndRepo, err)
+	}
+	return &GithubRepo{
+		ownerAndRepo: ownerAndRepo,
+		client:       c,
+	}, nil
+}
+
+func (g GithubRepo) GetOwnerAndRepo() string {
+	return g.ownerAndRepo
+}
+
+func (g GithubRepo) Exists() (bool, error) {
+	URI := "/repos/" + g.ownerAndRepo
+	resp, err := g.githubAPIRequest(http.MethodGet, URI)
+	if err != nil {
+		return false, err
+	}
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, fmt.Errorf("HTTP %d for %s", resp.StatusCode, URI)
+}
+
+func (g *GithubRepo) githubAPIRequest(method, URI string) (*http.Response, error) {
 	if !strings.HasPrefix(URI, "/") {
 		URI = "/" + URI
 	}
-	URL := d.githubAPIHost + URI
+	URL := g.client.apiHost + URI
 	req, err := http.NewRequest(method, URL, nil)
 	if err != nil {
 		return nil, err
 	}
-	if d.githubToken != "" {
-		req.Header.Add("Authorization", fmt.Sprintf("token %s", d.githubToken))
+	if g.client.token != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("token %s", g.client.token))
 	}
-	resp, err := d.httpClient.Do(req)
+	resp, err := g.client.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (d Downloader) ListGithubAssetsForTag(ownerAndRepo, tag string) ([]GithubAsset, error) {
-	ok, err := d.GithubRepoExists(ownerAndRepo)
+func (g GithubRepo) AssetsForTag(tag string) ([]GithubAsset, error) {
+	ok, err := g.Exists()
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, errors.New("no such repository")
 	}
-	URI := "/repos/" + ownerAndRepo + "/releases/tags/" + tag
-	resp, err := d.githubAPIRequest(http.MethodGet, URI)
+	URI := "/repos/" + g.ownerAndRepo + "/releases/tags/" + tag
+	resp, err := g.githubAPIRequest(http.MethodGet, URI)
 	if err != nil {
 		return nil, err
 	}
@@ -134,16 +201,16 @@ func (d Downloader) ListGithubAssetsForTag(ownerAndRepo, tag string) ([]GithubAs
 	return APIResp.Assets, nil
 }
 
-func (d Downloader) GetGithubLatestReleaseTag(ownerAndRepo string) (tagName string, err error) {
-	ok, err := d.GithubRepoExists(ownerAndRepo)
+func (g GithubRepo) GetTagForLatestRelease() (tagName string, err error) {
+	ok, err := g.Exists()
 	if err != nil {
 		return "", err
 	}
 	if !ok {
 		return "", errors.New("no such repository")
 	}
-	URI := "/repos/" + ownerAndRepo + "/releases/latest"
-	resp, err := d.githubAPIRequest(http.MethodGet, URI)
+	URI := "/repos/" + g.ownerAndRepo + "/releases/latest"
+	resp, err := g.githubAPIRequest(http.MethodGet, URI)
 	if err != nil {
 		return "", err
 	}
@@ -164,31 +231,16 @@ func (d Downloader) GetGithubLatestReleaseTag(ownerAndRepo string) (tagName stri
 	return *APIResp.TagName, nil
 }
 
-func (d Downloader) GithubRepoExists(ownerAndRepo string) (bool, error) {
-	URI := "/repos/" + ownerAndRepo
-	resp, err := d.githubAPIRequest(http.MethodGet, URI)
-	if err != nil {
-		return false, err
-	}
-	if resp.StatusCode == http.StatusOK {
-		return true, nil
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		return false, nil
-	}
-	return false, fmt.Errorf("HTTP %d for %s", resp.StatusCode, URI)
-}
-
-func (d Downloader) Download(asset GithubAsset) (filePath string, err error) {
+func (g GithubRepo) Download(asset GithubAsset) (filePath string, err error) {
 	req, err := http.NewRequest(http.MethodGet, asset.URL, nil)
 	if err != nil {
 		return "", err
 	}
-	if d.githubToken != "" {
-		req.Header.Add("Authorization", fmt.Sprintf("token %s", d.githubToken))
+	if g.client.token != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("token %s", g.client.token))
 	}
 	req.Header.Add("Accept", "application/octet-stream")
-	resp, err := d.httpClient.Do(req)
+	resp, err := g.client.httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -212,60 +264,27 @@ func (d Downloader) Download(asset GithubAsset) (filePath string, err error) {
 	return filePath, nil
 }
 
-// InstallGithubReleaseForVersion matches a Github release tag for the
-// specified version, then calls InstallGithubReleaseForTag(). The release tag
+// DownloadReleaseForVersion matches a Github release tag for the
+// specified version, then calls DownloadReleaseForTag(). The release tag
 // is matched from the specified version using
 // findGithubReleaseTagForVersion().
-func (j JKL) InstallGithubReleaseForVersion(ownerAndRepo, version string) (binaryPath string, err error) {
-	ownerAndRepo = strings.Replace(ownerAndRepo, "github.com/", "", 1)
-	d := NewDownloader()
-	tag, ok, err := d.findGithubReleaseTagForVersion(ownerAndRepo, version)
-	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return "", fmt.Errorf("no tag found matching version %q", version)
-	}
-	return j.InstallGithubReleaseForTag(ownerAndRepo, tag)
-}
-
-func (j JKL) InstallGithubReleaseForTag(ownerAndRepo, tag string) (binaryPath string, err error) {
-	debugLog.Printf("installing Github release %q for tag %q\n", tag, ownerAndRepo)
-	d := NewDownloader()
-	downloadedFile, err := d.DownloadGithubReleaseForTag(ownerAndRepo, tag, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return "", err
-	}
-	err = ExtractFile(downloadedFile)
-	if err != nil {
-		return "", err
-	}
-	toolName := filepath.Base(ownerAndRepo) // name of the repository
-	extractedToolBinary := fmt.Sprintf("%s/%s", filepath.Dir(downloadedFile), toolName)
-	installDest := fmt.Sprintf("%s/%s/%s", j.installsDir, toolName, tag)
-	err = CopyExecutableToCreatedDir(extractedToolBinary, installDest)
-	if err != nil {
-		return "", err
-	}
-	binaryPath = fmt.Sprintf("%s/%s", installDest, toolName)
-	return binaryPath, nil
-
-}
-
-func (j JKL) InstallGithubReleaseForLatest(ownerAndRepo string) (binaryPath, latestVersionTag string, err error) {
-	d := NewDownloader()
-	latestVersionTag, err = d.GetGithubLatestReleaseTag(ownerAndRepo)
+func (g GithubRepo) DownloadReleaseForVersion(version string) (binaryPath, matchedTag string, err error) {
+	tag, ok, err := g.findTagForVersion(version)
 	if err != nil {
 		return "", "", err
 	}
-	binaryPath, err = j.InstallGithubReleaseForTag(ownerAndRepo, latestVersionTag)
-	return binaryPath, latestVersionTag, err
+	if !ok {
+		return "", "", fmt.Errorf("no tag found matching version %q", version)
+	}
+	binaryPath, err = g.DownloadReleaseForTag(tag)
+	matchedTag = tag
+	return
 }
 
-func (d Downloader) findGithubReleaseTagForVersion(ownerAndRepo, version string) (tag string, found bool, err error) {
-	debugLog.Printf("finding Github tag matching version %q of %q\n", version, ownerAndRepo)
-	URI := "/repos/" + ownerAndRepo + "/releases"
-	resp, err := d.githubAPIRequest(http.MethodGet, URI)
+func (g GithubRepo) findTagForVersion(version string) (tag string, found bool, err error) {
+	debugLog.Printf("finding Github tag matching version %q of %q\n", version, g.GetOwnerAndRepo())
+	URI := "/repos/" + g.ownerAndRepo + "/releases"
+	resp, err := g.githubAPIRequest(http.MethodGet, URI)
 	if err != nil {
 		return "", false, err
 	}
@@ -304,20 +323,38 @@ func (d Downloader) findGithubReleaseTagForVersion(ownerAndRepo, version string)
 	return "", false, nil
 }
 
-func (d Downloader) DownloadGithubReleaseForTag(ownerAndRepo, tag, OS, arch string) (filePath string, err error) {
-	assets, err := d.ListGithubAssetsForTag(ownerAndRepo, tag)
+func (g GithubRepo) DownloadReleaseForLatest() (binaryPath, latestVersionTag string, err error) {
+	latestVersionTag, err = g.GetTagForLatestRelease()
+	if err != nil {
+		return "", "", err
+	}
+	binaryPath, err = g.DownloadReleaseForTag(latestVersionTag)
+	return binaryPath, latestVersionTag, err
+}
+
+func (g GithubRepo) DownloadReleaseForTagOSAndArch(tag, OS, arch string) (filePath string, err error) {
+	assets, err := g.AssetsForTag(tag)
 	if err != nil {
 		return "", err
 	}
-	asset, ok := MatchGithubAsset(assets, OS, arch)
+	asset, ok := MatchAssetByOsAndArch(assets, OS, arch)
 	if !ok {
-		return "", fmt.Errorf("no asset found matching Github owner/repository %s, tag %s, OS %s, and architecture %s", ownerAndRepo, tag, OS, arch)
+		return "", fmt.Errorf("no asset found matching Github owner/repository %s, tag %s, OS %s, and architecture %s", g.ownerAndRepo, tag, OS, arch)
 	}
-	filePath, err = d.Download(asset)
+	filePath, err = g.Download(asset)
 	return filePath, err
 }
 
-func MatchGithubAsset(assets []GithubAsset, OS, arch string) (GithubAsset, bool) {
+func (g GithubRepo) DownloadReleaseForTag(tag string) (binaryPath string, err error) {
+	debugLog.Printf("downloading Github release %q for tag %q\n", tag, g.ownerAndRepo)
+	downloadedFile, err := g.DownloadReleaseForTagOSAndArch(tag, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		return "", err
+	}
+	return downloadedFile, nil
+}
+
+func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (GithubAsset, bool) {
 	archAliases := map[string][]string{
 		"amd64": {"x86_64"},
 	}
@@ -334,7 +371,7 @@ func MatchGithubAsset(assets []GithubAsset, OS, arch string) (GithubAsset, bool)
 		// If no Darwin/ARM64 asset is available, try AMD64 which can run under Mac OS
 		// Rosetta.
 		debugLog.Println("trying to match Github asset for Darwin/AMD64 as none were found for ARM64")
-		return MatchGithubAsset(assets, OS, "amd64")
+		return MatchAssetByOsAndArch(assets, OS, "amd64")
 	}
 	return GithubAsset{}, false
 }

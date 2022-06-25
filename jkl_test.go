@@ -42,7 +42,7 @@ func TestMatchGithubAsset(t *testing.T) {
 		},
 	}
 
-	got, ok := jkl.MatchGithubAsset(testAssets, "darwin", "amd64")
+	got, ok := jkl.MatchAssetByOsAndArch(testAssets, "darwin", "amd64")
 	want := jkl.GithubAsset{
 		Name: "prme_0.0.6_Darwin_x86_64.tar.gz",
 		URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905345",
