@@ -15,14 +15,11 @@ JKL is a version manager for other command-line tools. It installs tools quickly
 	* Defaults can be set by configuration files in higher-level parent directories. Child configuration files can specify only a tool's version, with parent configuration files specifying where that tool can be downloaded.
 * Install multiple tools in parallel - useful when bootstrapping a new workstation or standard versions of tooling used by a project.
 
-## JKL Installation
+## Installation
 
-This process is mostly incomplete as I experiment for the best user experience. The intent is:
-
-* Download a Github release or build JKL on your own if desired.
-* Put the `jkl` binary in your `$PATH`, ideally the same location where you would like JKL to create shims for JKL-managed tools.
-* Optionally override the directory where JKL manages tools that it installs. This defaults to `~/.jkl/installs`
-* Use JKL to install your first tool by running `jkl -i github:User/Repo` (replacing `User` and `Repo` with a Github user and repository).
+* Download [a jkl release](https://github.com/ivanfetch/jkl/releases) or build jkl from a clone of this repository by running `go build cmd/jkl`
+* Run `jkl` to performa pre-fight check. This will instruct you to add the `~/.jkl` directory to your path, and install your first jkl-managed tool from a Github release using a command like: `jkl install github:<github user>/<github repository>`
+* Ideally put the `jkl` binary in a directory that is part of your `PATH`, to make it easier to run jkl.
 
 ##Features Under Consideration
 

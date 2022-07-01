@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -41,7 +42,7 @@ func NewGithubClient(options ...githubClientOption) (*GithubClient, error) {
 	c := &GithubClient{
 		apiHost:    "https://api.github.com",
 		token:      os.Getenv("GH_TOKEN"),
-		httpClient: &http.Client{Timeout: time.Second * 10},
+		httpClient: &http.Client{Timeout: time.Second * 30},
 	}
 	for _, o := range options {
 		err := o(c)
@@ -55,6 +56,19 @@ func NewGithubClient(options ...githubClientOption) (*GithubClient, error) {
 type GithubAsset struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
+}
+
+var assetBaseNameRE *regexp.Regexp = regexp.MustCompile(`(?is)^(.+?)[-_]v?\d+.*`)
+
+// GetBaseName returns the asset name after attempting to strip version,
+// architecture, operating system, and file extension.
+func (g GithubAsset) GetBaseName() string {
+	matches := assetBaseNameRE.FindStringSubmatch(g.Name)
+	if matches == nil || len(matches) < 2 {
+		debugLog.Printf("unable to match a base asset name from %q, returning the full asset name", g.Name)
+	}
+	debugLog.Printf("matched base name %q for asset name %q", matches[1], g.Name)
+	return matches[1]
 }
 
 type GithubReleases []struct {
@@ -265,24 +279,33 @@ func (g GithubRepo) Download(asset GithubAsset) (filePath string, err error) {
 }
 
 // DownloadReleaseForVersion matches a Github release tag for the
-// specified version, then calls DownloadReleaseForTag(). The release tag
-// is matched from the specified version using
+// specified version, then calls DownloadReleaseForTag().
+// The release tag is matched from the specified version using
 // findGithubReleaseTagForVersion().
-func (g GithubRepo) DownloadReleaseForVersion(version string) (binaryPath, matchedTag string, err error) {
+// An empty version causes the latest release to be installed.
+func (g GithubRepo) DownloadReleaseForVersion(version string) (binaryPath, matchedTag, assetBaseName string, err error) {
 	tag, ok, err := g.findTagForVersion(version)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if !ok {
-		return "", "", fmt.Errorf("no tag found matching version %q", version)
+		return "", "", "", fmt.Errorf("no tag found matching version %q", version)
 	}
-	binaryPath, err = g.DownloadReleaseForTag(tag)
-	matchedTag = tag
-	return
+	binaryPath, assetBaseName, err = g.DownloadReleaseForTag(tag)
+	return binaryPath, tag, assetBaseName, err
 }
 
+// findTagForVersion matches a release tag to the specified version. An empty
+// version or "latest" will return the latest release tag.
 func (g GithubRepo) findTagForVersion(version string) (tag string, found bool, err error) {
 	debugLog.Printf("finding Github tag matching version %q of %q\n", version, g.GetOwnerAndRepo())
+	if version == "" || strings.EqualFold(version, "latest") {
+		tag, err = g.GetTagForLatestRelease()
+		if err != nil {
+			return "", false, err
+		}
+		return tag, true, nil
+	}
 	URI := "/repos/" + g.ownerAndRepo + "/releases"
 	resp, err := g.githubAPIRequest(http.MethodGet, URI)
 	if err != nil {
@@ -323,46 +346,49 @@ func (g GithubRepo) findTagForVersion(version string) (tag string, found bool, e
 	return "", false, nil
 }
 
-func (g GithubRepo) DownloadReleaseForLatest() (binaryPath, latestVersionTag string, err error) {
+func (g GithubRepo) DownloadReleaseForLatest() (binaryPath, latestVersionTag, assetBaseName string, err error) {
 	latestVersionTag, err = g.GetTagForLatestRelease()
+	if err != nil {
+		return "", "", "", err
+	}
+	binaryPath, assetBaseName, err = g.DownloadReleaseForTag(latestVersionTag)
+	return binaryPath, latestVersionTag, assetBaseName, err
+}
+
+func (g GithubRepo) DownloadReleaseForTagOSAndArch(tag, OS, arch string) (filePath, baseAssetName string, err error) {
+	assets, err := g.AssetsForTag(tag)
 	if err != nil {
 		return "", "", err
 	}
-	binaryPath, err = g.DownloadReleaseForTag(latestVersionTag)
-	return binaryPath, latestVersionTag, err
-}
-
-func (g GithubRepo) DownloadReleaseForTagOSAndArch(tag, OS, arch string) (filePath string, err error) {
-	assets, err := g.AssetsForTag(tag)
-	if err != nil {
-		return "", err
-	}
 	asset, ok := MatchAssetByOsAndArch(assets, OS, arch)
 	if !ok {
-		return "", fmt.Errorf("no asset found matching Github owner/repository %s, tag %s, OS %s, and architecture %s", g.ownerAndRepo, tag, OS, arch)
+		return "", "", fmt.Errorf("no asset found matching Github owner/repository %s, tag %s, OS %s, and architecture %s", g.ownerAndRepo, tag, OS, arch)
 	}
 	filePath, err = g.Download(asset)
-	return filePath, err
+	return filePath, asset.GetBaseName(), err
 }
 
-func (g GithubRepo) DownloadReleaseForTag(tag string) (binaryPath string, err error) {
+func (g GithubRepo) DownloadReleaseForTag(tag string) (binaryPath, assetBaseName string, err error) {
 	debugLog.Printf("downloading Github release %q for tag %q\n", tag, g.ownerAndRepo)
-	downloadedFile, err := g.DownloadReleaseForTagOSAndArch(tag, runtime.GOOS, runtime.GOARCH)
+	downloadedFile, assetBaseName, err := g.DownloadReleaseForTagOSAndArch(tag, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return downloadedFile, nil
+	return downloadedFile, assetBaseName, nil
 }
 
 func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (GithubAsset, bool) {
 	archAliases := map[string][]string{
 		"amd64": {"x86_64"},
 	}
+	OSAliases := map[string][]string{
+		"darwin": {"macos"},
+	}
 	LCOS := strings.ToLower(OS)
 	LCArch := strings.ToLower(arch)
 	for _, asset := range assets {
 		LCAssetName := strings.ToLower(asset.Name)
-		if strings.Contains(LCAssetName, LCOS) && stringContainsOneOf(LCAssetName, LCArch, archAliases[LCArch]...) {
+		if stringContainsOneOf(LCAssetName, LCOS, OSAliases[LCOS]...) && stringContainsOneOf(LCAssetName, LCArch, archAliases[LCArch]...) {
 			debugLog.Printf("matched this asset for OS %q and arch %q: %#v", OS, arch, asset)
 			return asset, true
 		}

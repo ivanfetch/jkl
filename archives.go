@@ -54,22 +54,22 @@ func (f *fileTypeReader) Type() string {
 }
 
 // ExtractFile uncompresses and unarchives a file of type gzip, bzip2, tar,
-// and zip. If the file is not one of these types, this function silently
-// returns.
-func ExtractFile(filePath string) error {
+// and zip. If the file is not one of these types, wasExtracted returns
+// false.
+func ExtractFile(filePath string) (wasExtracted bool, err error) {
 	oldCWD, err := os.Getwd()
 	if err != nil {
-		return err
+		return false, err
 	}
 	absFilePath, err := filepath.Abs(filePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	destDirName := filepath.Dir(filePath)
 	debugLog.Printf("extracting file %q into directory %q", absFilePath, destDirName)
 	err = os.Chdir(destDirName)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() {
 		dErr := os.Chdir(oldCWD)
@@ -79,16 +79,16 @@ func ExtractFile(filePath string) error {
 	}()
 	f, err := os.Open(absFilePath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	fileStat, err := f.Stat()
 	if err != nil {
-		return err
+		return false, err
 	}
 	fileSize := fileStat.Size()
 	ftr, fileType, err := NewFileTypeReader(f)
 	if err != nil {
-		return err
+		return false, err
 	}
 	debugLog.Printf("file type %v\n", fileType)
 	fileName := filepath.Base(filePath)
@@ -96,17 +96,17 @@ func ExtractFile(filePath string) error {
 	case "gz":
 		err := gunzipFile(ftr)
 		if err != nil {
-			return err
+			return false, err
 		}
 	case "bz2":
 		err := bunzip2File(ftr, fileName)
 		if err != nil {
-			return err
+			return false, err
 		}
 	case "tar":
 		err = extractTarFile(ftr)
 		if err != nil {
-			return err
+			return false, err
 		}
 	case "zip":
 		// archive/zip requires io.ReaderAt, satisfied by os.File instead of
@@ -115,13 +115,13 @@ func ExtractFile(filePath string) error {
 		// impacted by the fileTypeReader having read the first 512 bytes above.
 		err = extractZipFile(f, fileSize)
 		if err != nil {
-			return err
+			return false, err
 		}
 	default:
 		debugLog.Printf("nothing to extract from file %s, unknown file type %q", fileName, fileType)
-		return nil
+		return false, nil
 	}
-	return nil
+	return true, nil
 }
 
 // saveAs writes the content of an io.Reader to the specified file. If the
@@ -211,6 +211,7 @@ func bunzip2File(r io.Reader, filePath string) error {
 
 // extractTarFile uses tar to extract the specified io.Reader into the current
 // directory.
+// Files are extracted in a flat hierarchy, without their sub-directories.
 func extractTarFile(r io.Reader) error {
 	debugLog.Println("extracting tar")
 	tarReader := tar.NewReader(r)
@@ -225,12 +226,16 @@ func extractTarFile(r io.Reader) error {
 		}
 		switch header.Typeflag {
 		case tar.TypeDir:
+			debugLog.Printf("skipping directory %q", header.Name)
+			continue
+			/* This code kept for future `retainDirStructure` option.
 			err = os.Mkdir(header.Name, 0700)
 			if err != nil {
 				return err
 			}
+			*/
 		case tar.TypeReg:
-			err = saveAs(tarReader, header.Name)
+			err = saveAs(tarReader, filepath.Base(header.Name))
 			if err != nil {
 				return err
 			}
@@ -243,6 +248,7 @@ func extractTarFile(r io.Reader) error {
 
 // extractZipFile uses zip to extract the specified os.File into the
 // current directory.
+// Files are extracted in a flat hierarchy, without their sub-directories.
 func extractZipFile(f *os.File, size int64) error {
 	debugLog.Println("extracting zip")
 	zipReader, err := zip.NewReader(f, size)
@@ -250,11 +256,15 @@ func extractZipFile(f *os.File, size int64) error {
 		return err
 	}
 	for _, zrf := range zipReader.File {
+		if strings.HasSuffix(zrf.Name, "/") {
+			debugLog.Printf("Skipping directory %q", zrf.Name)
+			continue
+		}
 		zf, err := zrf.Open()
 		if err != nil {
 			return fmt.Errorf("cannot open %s in zip file: %v", zrf.Name, err)
 		}
-		err = saveAs(zf, zrf.Name)
+		err = saveAs(zf, filepath.Base(zrf.Name))
 		if err != nil {
 			zf.Close()
 			return fmt.Errorf("Cannot write to %s: %v", f.Name(), err)

@@ -7,13 +7,9 @@ import (
 )
 
 func main() {
-	j, err := jkl.New(jkl.WithInstallsDir("~/.jkl/installs"), jkl.WithShimsDir("~/.jkl/bin"))
-
+	err := jkl.RunCLI(os.Args, os.Stdout, os.Stderr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	}
-	err = j.RunCLI(os.Args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }

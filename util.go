@@ -64,15 +64,17 @@ func CopyFile(filePath, destDir string) error {
 	return nil
 }
 
-// CopyExecutableToCreatedDir copies the specified file to destDir, and sets
-// permissions to 0755 so the resulting file is executable. IF destDir does
-// not exist it wil be created.
-func CopyExecutableToCreatedDir(filePath, destDir string) error {
-	_, err := os.Stat(filePath)
+// CopyExecutableToCreatedDir copies the specified file to destFilePath, and sets
+// permissions to 0755 so the resulting file is executable. IF destFilePath
+// minus the file name does
+// not exist, the directory wil be created.
+func CopyExecutableToCreatedDir(sourceFilePath, destFilePath string) error {
+	_, err := os.Stat(sourceFilePath)
 	if err != nil {
 		return err
 	}
-	debugLog.Printf("copying file %q to directory %q", filePath, destDir)
+	debugLog.Printf("copying file %q to %q", sourceFilePath, destFilePath)
+	destDir := filepath.Dir(destFilePath)
 	_, err = os.Stat(destDir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -84,24 +86,23 @@ func CopyExecutableToCreatedDir(filePath, destDir string) error {
 			return err
 		}
 	}
-	fileName := filepath.Base(filePath)
-	s, err := os.Open(filePath)
+	s, err := os.Open(sourceFilePath)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
-	d, err := os.Create(destDir + "/" + fileName)
+	d, err := os.Create(destFilePath)
 	if err != nil {
 		return err
 	}
 	err = d.Chmod(0755)
 	if err != nil {
-		return fmt.Errorf("cannot set mode on %s: %v", destDir+fileName, err)
+		return fmt.Errorf("cannot set mode on %s: %v", destFilePath, err)
 	}
 	defer d.Close()
 	_, err = io.Copy(d, s)
 	if err != nil {
-		return fmt.Errorf("Cannot write to %s: %v", fileName, err)
+		return fmt.Errorf("Cannot write to %s: %v", destFilePath, err)
 	}
 	return nil
 }
@@ -164,4 +165,27 @@ func listPathsByParent(fileName string, options ...pathOption) (paths []string, 
 	}
 	debugLog.Printf("File %s was found in these paths: %v\n", fileName, paths)
 	return paths, nil
+}
+
+// directoryInPath returns true if the specified directory is among those in
+// the PATH environment variable.
+func directoryInPath(dirName string) (bool, error) {
+	if dirName == "" {
+		return false, nil
+	}
+	absDirName, err := filepath.Abs(dirName)
+	if err != nil {
+		return false, fmt.Errorf("cannot make %q absolute: %v", dirName, err)
+	}
+	pathComponents := filepath.SplitList(os.Getenv("PATH"))
+	for _, component := range pathComponents {
+		absComponent, err := filepath.Abs(component)
+		if err != nil {
+			return false, fmt.Errorf("cannot make path component %q absolute: %v", component, err)
+		}
+		if absComponent == absDirName {
+			return true, nil
+		}
+	}
+	return false, nil
 }

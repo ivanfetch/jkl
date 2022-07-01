@@ -20,37 +20,50 @@ func TestExtractFile(t *testing.T) {
 		description     string
 		archiveFilePath string
 		extractedFiles  []string
+		wasExtracted    bool
 		expectError     bool
 	}{
 		{
 			description:     "Single file gzip compressed",
 			archiveFilePath: "file.gz",
 			extractedFiles:  []string{"file"},
+			wasExtracted:    true,
 		},
 		{
 			description:     "Single file bzip2 compressed",
 			archiveFilePath: "file.bz2",
 			extractedFiles:  []string{"file"},
+			wasExtracted:    true,
 		},
 		{
 			description:     "tar gzip compressed",
 			archiveFilePath: "file.tar.gz",
-			extractedFiles:  []string{"file", "subdir/file"},
+			extractedFiles:  []string{"file", "file2"},
+			wasExtracted:    true,
 		},
 		{
 			description:     "tar bzip2 compressed",
 			archiveFilePath: "file.tar.bz2",
-			extractedFiles:  []string{"file", "subdir/file"},
+			extractedFiles:  []string{"file", "file2"},
+			wasExtracted:    true,
 		},
 		{
 			description:     "uncompressed tar",
 			archiveFilePath: "file.tar",
-			extractedFiles:  []string{"file", "subdir/file"},
+			extractedFiles:  []string{"file", "file2"},
+			wasExtracted:    true,
 		},
 		{
 			description:     "zip",
 			archiveFilePath: "file.zip",
-			extractedFiles:  []string{"file", "subdir/file"},
+			extractedFiles:  []string{"file", "file2"},
+			wasExtracted:    true,
+		},
+		{
+			description:     "A plain file not in an archive",
+			archiveFilePath: "plain-file",
+			extractedFiles:  []string{"plain-file"},
+			wasExtracted:    false,
 		},
 		{
 			description:     "Truncated gzip which will return an error",
@@ -86,15 +99,21 @@ func TestExtractFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			tempArchiveFilePath := tempDir + "/" + filepath.Base(tc.archiveFilePath)
-			err = jkl.ExtractFile(tempArchiveFilePath)
+			wasExtracted, err := jkl.ExtractFile(tempArchiveFilePath)
 			if err != nil && !tc.expectError {
 				t.Fatal(err)
 			}
-			// Include the archive file in the list of expected files, which was
+			if tc.wasExtracted != wasExtracted {
+				t.Errorf("want wasExtracted to be %v, got %v", tc.wasExtracted, wasExtracted)
+			}
+			// IF files are expected to be extracted, include the archive file in the
+			// list of expected files, which was
 			// also 			copied into tempDir.
-			wantExtractedFiles := make([]string, len(tc.extractedFiles)+1)
+			wantExtractedFiles := make([]string, len(tc.extractedFiles))
 			copy(wantExtractedFiles, tc.extractedFiles)
-			wantExtractedFiles[len(wantExtractedFiles)-1] = tc.archiveFilePath
+			if tc.wasExtracted || tc.expectError {
+				wantExtractedFiles = append(wantExtractedFiles, tc.archiveFilePath)
+			}
 			sort.Strings(wantExtractedFiles)
 			gotExtractedFiles, err := filesInDir(tempDir)
 			if err != nil {
