@@ -4,8 +4,8 @@ package jkl_test
 
 import (
 	"fmt"
+	"github.com/ivanfetch/jkl"
 	"io/fs"
-	"jkl"
 	"os"
 	"sort"
 	"testing"

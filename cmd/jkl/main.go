@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"jkl"
 	"os"
+
+	"github.com/ivanfetch/jkl"
 )
 
 func main() {

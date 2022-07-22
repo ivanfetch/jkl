@@ -1,9 +1,10 @@
 package jkl_test
 
 import (
-	"jkl"
 	"os"
 	"testing"
+
+	"github.com/ivanfetch/jkl"
 
 	"github.com/google/go-cmp/cmp"
 )

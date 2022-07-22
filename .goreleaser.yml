@@ -1,0 +1,42 @@
+brews:
+- name: jkl
+  # Do not update our tap repo if the git tag indicates prerelease. E.G. 1.0.0-rc1
+  skip_upload: auto
+  goarm: 6
+  tap:
+    owner: ivanfetch
+    name: homebrew-jkl
+  homepage: https://github.com/ivanfetch/jkl
+  description: JKL is a version manager for other command-line tools. It installs tools quickly with minimal input, and helps you switch versions of tools while you work.
+  caveats: You will need to add the jkl shims directory (default ~/.jkl/bin) to your PATH.
+  test: |
+    system "#{bin}/jkl version"
+builds:
+- ldflags:
+  - -X github.com/ivanfetch/jkl.Version={{.Version}} -X github.com/ivanfetch/jkl.GitCommit={{.Commit}} -s -w
+  env:
+  - CGO_ENABLED=0
+  main: ./cmd/jkl
+  # goreleaser builds a matrix of the GOOS, GOArch, and GOARM listed below,
+  # minus those under `ignore`.
+  goarch:
+  - 386
+  - amd64
+  - arm
+  - arm64
+  goos:
+  - linux
+  - darwin
+  # windows not yet tested
+  goarm:
+  - 6
+  - 7
+  ignore:
+  - goos: windows
+    goarch: arm64
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
