@@ -65,7 +65,15 @@ var assetBaseNameRE *regexp.Regexp = regexp.MustCompile(`(?is)^(.+?)[-_]v?\d+.*`
 func (g GithubAsset) GetBaseName() string {
 	matches := assetBaseNameRE.FindStringSubmatch(g.Name)
 	if matches == nil || len(matches) < 2 {
-		debugLog.Printf("unable to match a base asset name from %q, returning the full asset name", g.Name)
+		simplerMatches := strings.FieldsFunc(g.Name, func(r rune) bool {
+			return r == '-' || r == '_'
+		})
+		if len(simplerMatches) == 0 {
+			debugLog.Printf("unable to match a base asset name from %q, returning the full asset name", g.Name)
+			return g.Name
+		}
+		debugLog.Printf("matched simpler base name %q for asset name %q", simplerMatches[0], g.Name)
+		return simplerMatches[0]
 	}
 	debugLog.Printf("matched base name %q for asset name %q", matches[1], g.Name)
 	return matches[1]
