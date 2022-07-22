@@ -40,11 +40,12 @@ func RunCLI(args []string, output, errOutput io.Writer) error {
 			return err
 		},
 	}
+	rootCmd.CompletionOptions.DisableDefaultCmd = true // Until completion behavior is tested
 	rootCmd.PersistentFlags().BoolVarP(&debugFlagEnabled, "debug", "D", false, "Enable debug output (also enabled by setting the JKL_DEBUG environment variable to any value).")
 
 	var versionCmd = &cobra.Command{
 		Use:     "version",
-		Short:   "Display the jkl version",
+		Short:   "Display the jkl version and git commit",
 		Long:    "Display the jkl version and git commit",
 		Aliases: []string{"ver", "v"},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -60,7 +61,7 @@ func RunCLI(args []string, output, errOutput io.Writer) error {
 	If no version is specified, the latest version will be installed (not including pre-release versions). A partial major version will match the latest minor one.
 
 Available providers are:
-	github|gh - install a Github release`,
+	github|gh - install a Github release. The source is specified as <Github user>/<Github repository>.`,
 		Example: `	jkl install github:fairwindsops/rbac-lookup
 jkl install github:fairwindsops/rbac-lookup:0.9.0
 	jkl install github:fairwindsops/rbac-lookup:0.8`,
@@ -93,10 +94,10 @@ jkl list rbac-lookup`,
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
-				j.displayInstalledVersionsOfTool(cmd.OutOrStdout(), args[0])
+				err := j.displayInstalledVersionsOfTool(cmd.OutOrStdout(), args[0])
 				return err
 			}
-			j.displayInstalledTools(cmd.OutOrStdout())
+			err := j.displayInstalledTools(cmd.OutOrStdout())
 			return err
 		},
 	}

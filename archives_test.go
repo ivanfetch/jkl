@@ -2,11 +2,12 @@ package jkl_test
 
 import (
 	"io/fs"
-	"jkl"
 	"os"
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/ivanfetch/jkl"
 
 	"github.com/google/go-cmp/cmp"
 )

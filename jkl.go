@@ -132,13 +132,18 @@ func (j JKL) displayGettingStarted(output io.Writer) error {
 	var numToolsPhrase string
 	switch len(managedTools) {
 	case 0:
-		numToolsPhrase = fmt.Sprintf("not yet managing any tools, to install your first tool using a Github release, run: %s install github:{user name}/{repository name}", callMeProgName)
+		numToolsPhrase = "not yet managing any tools"
 	case 1:
-		numToolsPhrase = fmt.Sprintf("already managing 1 tool. Run %[1]s list to see a list of managed tools, or use %[1]s install to install more tools.", callMeProgName)
+		numToolsPhrase = "already managing one tool"
 	default:
-		numToolsPhrase = fmt.Sprintf("already managing %d tools. Run %[2]s list to see a list of managed tools, or %[2]s install to install more tools.", len(managedTools), callMeProgName)
+		numToolsPhrase = fmt.Sprintf("already managing %d tools", len(managedTools))
 	}
-	fmt.Fprintf(output, "%[1]s is %[2]s\n", callMeProgName, numToolsPhrase)
+	fmt.Fprintf(output, `%[1]s is %[2]s.
+To install more tools, run: %[1]s install github:<Github user>/<Github repository>
+To list jkl-managed tools, run: %[1]s list
+To list installed versions of a tool, run: %[1]s list <ToolName>
+For additional help, run: %[1]s help
+`, callMeProgName, numToolsPhrase)
 	return nil
 }
 

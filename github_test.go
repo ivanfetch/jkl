@@ -1,8 +1,9 @@
 package jkl_test
 
 import (
-	"jkl"
 	"testing"
+
+	"github.com/ivanfetch/jkl"
 )
 
 func TestGithubMatchTagFromPartialVersion(t *testing.T) {

@@ -2,11 +2,12 @@ package jkl_test
 
 import (
 	"fmt"
-	"jkl"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/ivanfetch/jkl"
 )
 
 // wrapRunCommand is a helper function that calls jkl.RunCommand() without

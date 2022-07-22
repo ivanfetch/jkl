@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"jkl"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ivanfetch/jkl"
 )
 
 func TestFindASDFToolVersion(t *testing.T) {
