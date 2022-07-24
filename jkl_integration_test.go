@@ -25,23 +25,37 @@ func TestInstall(t *testing.T) {
 	}{
 		{
 			description:        "latest version of ivanfetch/prme",
-			toolSpec:           "ivanfetch/prme",
+			toolSpec:           "github:ivanfetch/prme",
 			wantVersion:        "v0.0.6",
 			wantInstalledFiles: []string{"prme/v0.0.6/prme"},
 			wantShims:          []string{"prme"},
 		},
 		{
 			description:        "version v0.0.4 of ivanfetch/prme",
-			toolSpec:           "ivanfetch/prme:0.0.4",
+			toolSpec:           "github:ivanfetch/prme:0.0.4",
 			wantVersion:        "v0.0.4",
 			wantInstalledFiles: []string{"prme/v0.0.4/prme"},
 			wantShims:          []string{"prme"},
+		},
+		{
+			description:        "version 0.14.0 of github:kubernetes-sigs/kind",
+			toolSpec:           "github:kubernetes-sigs/kind:0.14.0",
+			wantVersion:        "v0.14.0",
+			wantInstalledFiles: []string{"kind/v0.14.0/kind"},
+			wantShims:          []string{"kind"},
+		},
+		{
+			description:        "version 2.14.2 of github:cli/cli",
+			toolSpec:           "github:cli/cli:2.14.2",
+			wantVersion:        "v2.14.2",
+			wantInstalledFiles: []string{"gh/v2.14.2/gh"},
+			wantShims:          []string{"gh"},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			tempDir := t.TempDir()
-			j, err := jkl.New(jkl.WithInstallsDir(tempDir+"/installs"), jkl.WithShimsDir(tempDir+"/shims"))
+			j, err := jkl.NewJKL(jkl.WithInstallsDir(tempDir+"/installs"), jkl.WithShimsDir(tempDir+"/shims"))
 			if err != nil {
 				t.Fatal(err)
 			}
