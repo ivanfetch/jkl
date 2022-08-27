@@ -6,16 +6,20 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	hashicorpversion "github.com/hashicorp/go-version"
 	homedir "github.com/mitchellh/go-homedir"
 )
 
 var debugLog *log.Logger = log.New(io.Discard, "", 0)
+
+var defaultHTTPClient http.Client = http.Client{Timeout: time.Second * 30}
 
 const (
 	callMeProgName = "jkl"
@@ -165,39 +169,50 @@ func (j JKL) Install(toolSpec string) (installedVersion string, err error) {
 	}
 	toolProvider = strings.ToLower(toolSpecFields[0])
 	toolSource = toolSpecFields[1]
+	var toolName, actualToolVersion, downloadPath string
 	switch toolProvider {
 	case "github", "gh":
 		g, err := NewGithubRepo(toolSource)
 		if err != nil {
 			return "", err
 		}
-		downloadPath, actualToolVersion, assetBaseName, err := g.DownloadReleaseForVersion(toolVersion)
+		downloadPath, actualToolVersion, toolName, err = g.DownloadReleaseForVersion(toolVersion)
 		if err != nil {
 			return "", err
 		}
-		wasExtracted, err := ExtractFile(downloadPath)
+	case "hashicorp", "hashi":
+		h, err := NewHashicorpProduct(toolSource)
 		if err != nil {
 			return "", err
 		}
-		toolName := assetBaseName
-		var extractedToolBinary string = downloadPath // non-archived binary
-		if wasExtracted {
-			extractedToolBinary = fmt.Sprintf("%s/%s", filepath.Dir(downloadPath), toolName)
-		}
-		installDest := fmt.Sprintf("%s/%s/%s/%s", j.installsDir, toolName, actualToolVersion, toolName)
-		err = CopyExecutableToCreatedDir(extractedToolBinary, installDest)
+		toolName = toolSource
+		downloadPath, actualToolVersion, err = h.DownloadReleaseForVersion(toolVersion)
 		if err != nil {
 			return "", err
 		}
-		err = j.createShim(toolName)
-		if err != nil {
-			return "", err
-		}
-		debugLog.Printf("Installed version %q", actualToolVersion)
-		return actualToolVersion, nil
 	default:
 		return "", fmt.Errorf("unknown tool provider %q", toolProvider)
 	}
+	wasExtracted, err := ExtractFile(downloadPath)
+	if err != nil {
+		return "", err
+	}
+	var extractedToolBinary string
+	extractedToolBinary = downloadPath // non-archived binary
+	if wasExtracted {
+		extractedToolBinary = fmt.Sprintf("%s/%s", filepath.Dir(downloadPath), toolName)
+	}
+	installDest := fmt.Sprintf("%s/%s/%s/%s", j.installsDir, toolName, actualToolVersion, toolName)
+	err = CopyExecutableToCreatedDir(extractedToolBinary, installDest)
+	if err != nil {
+		return "", err
+	}
+	err = j.createShim(toolName)
+	if err != nil {
+		return "", err
+	}
+	debugLog.Printf("Installed version %q", actualToolVersion)
+	return actualToolVersion, nil
 }
 
 // CreateShim creates a symbolic link for the specified tool name, pointing to

@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"time"
 )
 
 type GithubClient struct {
@@ -42,7 +41,7 @@ func NewGithubClient(options ...githubClientOption) (*GithubClient, error) {
 	c := &GithubClient{
 		apiHost:    "https://api.github.com",
 		token:      os.Getenv("GH_TOKEN"),
-		httpClient: &http.Client{Timeout: time.Second * 30},
+		httpClient: &defaultHTTPClient,
 	}
 	for _, o := range options {
 		err := o(c)

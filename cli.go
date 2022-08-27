@@ -61,10 +61,12 @@ func RunCLI(args []string, output, errOutput io.Writer) error {
 	If no version is specified, the latest version will be installed (not including pre-release versions). A partial major version will match the latest minor one.
 
 Available providers are:
-	github|gh - install a Github release. The source is specified as <Github user>/<Github repository>.`,
+	github|gh - install a Github release. The source is specified as <Github user>/<Github repository>.
+	hashicorp|hashi - install a Hashicorp product. The source is the name of the Hashicorp product.`,
 		Example: `	jkl install github:fairwindsops/rbac-lookup
-jkl install github:fairwindsops/rbac-lookup:0.9.0
-	jkl install github:fairwindsops/rbac-lookup:0.8`,
+	jkl install github:fairwindsops/rbac-lookup:0.9.0
+	jkl install github:fairwindsops/rbac-lookup:0.8
+	jkl install hashicorp:terraform:1.2`,
 		Aliases: []string{"add", "inst", "i"},
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {

@@ -21,6 +21,17 @@ func stringContainsOneOf(s, firstSubstr string, additionalSubstrs ...string) boo
 	return false
 }
 
+// stringEqualFoldOneOf returns true if the string is case-insensitively equal
+// to one of the matches.
+func stringEqualFoldOneOf(s, firstMatchstr string, additionalMatchstrs ...string) bool {
+	for _, matchstr := range append([]string{firstMatchstr}, additionalMatchstrs...) {
+		if strings.EqualFold(s, matchstr) {
+			return true
+		}
+	}
+	return false
+}
+
 // toggleVPrefix returns the specified string after adding an missing `v`
 // prefix, or removing an existing `v` prefix.
 func toggleVPrefix(s string) string {

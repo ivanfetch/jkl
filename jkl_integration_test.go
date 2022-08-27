@@ -21,7 +21,7 @@ func TestInstall(t *testing.T) {
 		wantInstalledFiles []string
 		wantShims          []string
 		wantVersion        string
-		expectError        bool
+		expectVersionError bool
 	}{
 		{
 			description:        "latest version of ivanfetch/prme",
@@ -51,6 +51,25 @@ func TestInstall(t *testing.T) {
 			wantInstalledFiles: []string{"gh/v2.14.2/gh"},
 			wantShims:          []string{"gh"},
 		},
+		{
+			description:        "version 1.2.7 of hashicorp:terraform:1.2.7",
+			toolSpec:           "hashicorp:terraform:1.2.7",
+			wantVersion:        "1.2.7",
+			wantInstalledFiles: []string{"terraform/1.2.7/terraform"},
+			wantShims:          []string{"terraform"},
+		},
+		{
+			description:        "version 0.11.15 of hashicorp:terraform:0.11.15 which requires fetching multiple pages of releases",
+			toolSpec:           "hashicorp:terraform:0.11.15",
+			wantVersion:        "0.11.15",
+			wantInstalledFiles: []string{"terraform/0.11.15/terraform"},
+			wantShims:          []string{"terraform"},
+		},
+		{
+			description:        "nonexistent version 10.2 of hashicorp:terraform:10.2",
+			toolSpec:           "hashicorp:terraform:10.2",
+			expectVersionError: true,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
@@ -60,8 +79,14 @@ func TestInstall(t *testing.T) {
 				t.Fatal(err)
 			}
 			gotVersion, err := j.Install(tc.toolSpec)
-			if err != nil {
-				t.Fatal(err)
+			if tc.expectVersionError && err != nil {
+				return
+			}
+			if !tc.expectVersionError && err != nil {
+				t.Fatalf("unexpected version error: %v", err)
+			}
+			if tc.expectVersionError && err == nil {
+				t.Fatal("expected version error but got none")
 			}
 			if tc.wantVersion != gotVersion {
 				t.Fatalf("want version %q, got %q", tc.wantVersion, gotVersion)
