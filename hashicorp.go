@@ -331,18 +331,12 @@ func (h HashicorpProduct) DownloadReleaseForVersion(version string) (binaryPath,
 
 func MatchBuildByOsAndArch(builds []hashicorpBuild, OS, arch string) (hashicorpBuild, bool) {
 	debugLog.Printf("matching Hashicorp build by OS %q and architecture %q", OS, arch)
-	archAliases := map[string][]string{
-		"amd64": {"x86_64"},
-	}
-	OSAliases := map[string][]string{
-		"darwin": {"macos"},
-	}
 	LCOS := strings.ToLower(OS)
 	LCArch := strings.ToLower(arch)
 	for _, build := range builds {
 		LCBuildArch := strings.ToLower(build.Arch)
 		LCBuildOS := strings.ToLower(build.OS)
-		if stringEqualFoldOneOf(LCBuildOS, LCOS, OSAliases[LCOS]...) && stringEqualFoldOneOf(LCBuildArch, LCArch, archAliases[LCArch]...) {
+		if stringEqualFoldOneOf(LCBuildOS, LCOS, getAliasesForOperatingSystem(LCOS)...) && stringEqualFoldOneOf(LCBuildArch, LCArch, getAliasesForArchitecture(LCArch)...) {
 			debugLog.Printf("matched this asset for OS %q and arch %q: %#v", OS, arch, build)
 			return build, true
 		}
@@ -353,5 +347,6 @@ func MatchBuildByOsAndArch(builds []hashicorpBuild, OS, arch string) (hashicorpB
 		debugLog.Println("trying to match Hashicorp build for Darwin/AMD64 as none were found for ARM64")
 		return MatchBuildByOsAndArch(builds, OS, "amd64")
 	}
+	debugLog.Printf("no Hashicorp build matched OS %s and architecture %s", OS, arch)
 	return hashicorpBuild{}, false
 }

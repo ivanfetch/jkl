@@ -57,25 +57,26 @@ type GithubAsset struct {
 	URL  string `json:"url"`
 }
 
-var assetBaseNameRE *regexp.Regexp = regexp.MustCompile(`(?is)^(.+?)[-_]v?\d+.*`)
+var semVerRE *regexp.Regexp = regexp.MustCompile(`(.+?)[-_]v?\d+.*`)
 
-// GetBaseName returns the asset name after attempting to strip version,
-// architecture, operating system, and file extension.
-func (g GithubAsset) GetBaseName() string {
-	matches := assetBaseNameRE.FindStringSubmatch(g.Name)
-	if matches == nil || len(matches) < 2 {
-		simplerMatches := strings.FieldsFunc(g.Name, func(r rune) bool {
-			return r == '-' || r == '_'
-		})
-		if len(simplerMatches) == 0 {
-			debugLog.Printf("unable to match a base asset name from %q, returning the full asset name", g.Name)
-			return g.Name
-		}
-		debugLog.Printf("matched simpler base name %q for asset name %q", simplerMatches[0], g.Name)
-		return simplerMatches[0]
+// NameWithoutVersionAndComponents returns the asset name minus its version
+// and any specified components. A component is matched with a preseeding
+// underscore (_) or dash (-). For example, specifying a component of "darwin"
+// would strip "-darwin" and "_darwin".
+func (g GithubAsset) NameWithoutVersionAndComponents(components ...string) string {
+	debugLog.Printf("stripping the asset name %s of its version and components %v", g.Name, components)
+	var strippedName = g.Name
+	for _, component := range components {
+		strippedName = strings.Replace(strippedName, fmt.Sprintf("-%s", component), "", -1)
+		strippedName = strings.Replace(strippedName, fmt.Sprintf("_%s", component), "", -1)
 	}
-	debugLog.Printf("matched base name %q for asset name %q", matches[1], g.Name)
-	return matches[1]
+	withoutVersionMatches := semVerRE.FindStringSubmatch(strippedName)
+	if withoutVersionMatches != nil || len(withoutVersionMatches) >= 2 {
+		debugLog.Printf("the stripped name is %q", withoutVersionMatches[1])
+		return withoutVersionMatches[1]
+	}
+	debugLog.Printf("unable to strip a version, the stripped name is %q", strippedName)
+	return strippedName
 }
 
 type GithubReleases []struct {
@@ -106,7 +107,8 @@ func (g GithubReleases) MatchTagFromPartialVersion(pv string) (tag string, found
 	for i := len(tags) - 1; i >= 0; i-- {
 		LCPV := strings.ToLower(pv)
 		LCThisTag := strings.ToLower(tags[i])
-		if stringContainsOneOf(LCThisTag, "-rc", "-alpha", "-beta") {
+		_, foundPreRelease := stringContainsOneOfLowerCase(tags[i], "-rc", "-alpha", "-beta")
+		if foundPreRelease {
 			debugLog.Printf("skipping pre-release tag %q\n", tags[i])
 			continue
 		}
@@ -367,12 +369,15 @@ func (g GithubRepo) DownloadReleaseForTagOSAndArch(tag, OS, arch string) (filePa
 	if err != nil {
 		return "", "", err
 	}
-	asset, ok := MatchAssetByOsAndArch(assets, OS, arch)
+	asset, matchedOS, matchedArch, ok := MatchAssetByOsAndArch(assets, OS, arch)
 	if !ok {
 		return "", "", fmt.Errorf("no asset found matching Github owner/repository %s, tag %s, OS %s, and architecture %s", g.ownerAndRepo, tag, OS, arch)
 	}
 	filePath, err = g.Download(asset)
-	return filePath, asset.GetBaseName(), err
+	if err != nil {
+		return "", "", err
+	}
+	return filePath, asset.NameWithoutVersionAndComponents(matchedOS, matchedArch), nil
 }
 
 func (g GithubRepo) DownloadReleaseForTag(tag string) (binaryPath, assetBaseName string, err error) {
@@ -384,27 +389,20 @@ func (g GithubRepo) DownloadReleaseForTag(tag string) (binaryPath, assetBaseName
 	return downloadedFile, assetBaseName, nil
 }
 
-func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (GithubAsset, bool) {
-	archAliases := map[string][]string{
-		"amd64": {"x86_64"},
-	}
-	OSAliases := map[string][]string{
-		"darwin": {"macos"},
-	}
-	LCOS := strings.ToLower(OS)
-	LCArch := strings.ToLower(arch)
+func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (matchedAsset GithubAsset, matchedOS, matchedArch string, successfulMatch bool) {
 	for _, asset := range assets {
-		LCAssetName := strings.ToLower(asset.Name)
-		if stringContainsOneOf(LCAssetName, LCOS, OSAliases[LCOS]...) && stringContainsOneOf(LCAssetName, LCArch, archAliases[LCArch]...) {
+		matchedOS, foundOS := stringContainsOneOfLowerCase(asset.Name, OS, getAliasesForOperatingSystem(OS)...)
+		matchedArch, foundArch := stringContainsOneOfLowerCase(asset.Name, arch, getAliasesForArchitecture(arch)...)
+		if foundOS && foundArch {
 			debugLog.Printf("matched this asset for OS %q and arch %q: %#v", OS, arch, asset)
-			return asset, true
+			return asset, matchedOS, matchedArch, true
 		}
 	}
-	if LCOS == "darwin" && LCArch == "arm64" {
+	if strings.EqualFold(OS, "darwin") && strings.EqualFold(arch, "arm64") {
 		// If no Darwin/ARM64 asset is available, try AMD64 which can run under Mac OS
 		// Rosetta.
 		debugLog.Println("trying to match Github asset for Darwin/AMD64 as none were found for ARM64")
 		return MatchAssetByOsAndArch(assets, OS, "amd64")
 	}
-	return GithubAsset{}, false
+	return GithubAsset{}, "", "", false
 }

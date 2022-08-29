@@ -43,15 +43,23 @@ func TestMatchGithubAsset(t *testing.T) {
 		},
 	}
 
-	got, ok := jkl.MatchAssetByOsAndArch(testAssets, "darwin", "amd64")
-	want := jkl.GithubAsset{
+	gotAsset, gotOS, gotArch, ok := jkl.MatchAssetByOsAndArch(testAssets, "darwin", "amd64")
+	wantAsset := jkl.GithubAsset{
 		Name: "prme_0.0.6_Darwin_x86_64.tar.gz",
 		URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905345",
 	}
 	if !ok {
 		t.Fatal("no asset matched")
 	}
-	if !cmp.Equal(want, got) {
-		t.Fatalf("want vs. got: %s", cmp.Diff(want, got))
+	if !cmp.Equal(wantAsset, gotAsset) {
+		t.Fatalf("want vs. got: %s", cmp.Diff(wantAsset, gotAsset))
+	}
+	wantOS := "darwin"
+	if wantOS != gotOS {
+		t.Fatalf("want OS %s, got %s", wantOS, gotOS)
+	}
+	wantArch := "x86_64"
+	if wantArch != gotArch {
+		t.Fatalf("want architecture %s, got %s", wantArch, gotArch)
 	}
 }

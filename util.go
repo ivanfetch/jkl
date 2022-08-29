@@ -10,15 +10,16 @@ import (
 	"strings"
 )
 
-// StringContainsOneOf returns true if one of the sub-strings is contained
-// within s.
-func stringContainsOneOf(s, firstSubstr string, additionalSubstrs ...string) bool {
+// stringContainsOneOfLowerCase reports the first substring contained in s, returning
+// true if a match is found, and the original substring that matched.
+// Substrings are matched using lower-case.
+func stringContainsOneOfLowerCase(s, firstSubstr string, additionalSubstrs ...string) (match string, found bool) {
 	for _, substr := range append([]string{firstSubstr}, additionalSubstrs...) {
-		if strings.Contains(s, substr) {
-			return true
+		if strings.Contains(strings.ToLower(s), strings.ToLower(substr)) {
+			return substr, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // stringEqualFoldOneOf returns true if the string is case-insensitively equal
@@ -199,4 +200,18 @@ func directoryInPath(dirName string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func getAliasesForArchitecture(arch string) []string {
+	archAliases := map[string][]string{
+		"amd64": {"x86_64"},
+	}
+	return archAliases[strings.ToLower(arch)]
+}
+
+func getAliasesForOperatingSystem(OS string) []string {
+	OSAliases := map[string][]string{
+		"darwin": {"macos"},
+	}
+	return OSAliases[strings.ToLower(OS)]
 }

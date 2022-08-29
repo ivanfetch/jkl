@@ -93,28 +93,31 @@ func TestGithubMatchTagFromPartialVersion(t *testing.T) {
 	}
 }
 
-func TestGithubAssetGetBaseName(t *testing.T) {
+func TestGithubAssetNameWithoutVersionAndComponents(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		description string
-		asset       jkl.GithubAsset
-		want        string
+		description      string
+		asset            jkl.GithubAsset
+		removeComponents []string
+		want             string
 	}{
 		{
-			description: "archived binary with version, OS, and architecture",
-			asset:       jkl.GithubAsset{Name: "app_v1.2.3_darwin_x64.tar.gz"},
-			want:        "app",
+			description:      "archived binary with version, OS, and architecture",
+			asset:            jkl.GithubAsset{Name: "app_v1.2.3_darwin_x64.tar.gz"},
+			removeComponents: []string{"darwin", "x64"},
+			want:             "app",
 		},
 		{
-			description: "not-archived binary with no version",
-			asset:       jkl.GithubAsset{Name: "app-darwin-amd64"},
-			want:        "app",
+			description:      "not-archived binary with no version",
+			asset:            jkl.GithubAsset{Name: "app-darwin-amd64"},
+			removeComponents: []string{"darwin", "amd64"},
+			want:             "app",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			got := tc.asset.GetBaseName()
+			got := tc.asset.NameWithoutVersionAndComponents(tc.removeComponents...)
 			if tc.want != got {
 				t.Errorf("want base name %q, got %q for asset %q", tc.want, got, tc.asset.Name)
 			}
