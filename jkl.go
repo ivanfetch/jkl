@@ -10,10 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
-	hashicorpversion "github.com/hashicorp/go-version"
 	homedir "github.com/mitchellh/go-homedir"
 )
 
@@ -154,65 +152,55 @@ For additional help, run: %[1]s help
 // Install installs the specified tool-specification and creates a shim,
 // returning the version that was installed. The tool-specification represents
 // the tool provider and an optional version.
-func (j JKL) Install(toolSpec string) (installedVersion string, err error) {
-	debugLog.Printf("Installing tool specification %q\n", toolSpec)
-	var toolProvider, toolSource, toolVersion string
-	toolSpecFields := strings.Split(toolSpec, ":")
-	if len(toolSpecFields) > 3 {
-		return "", fmt.Errorf("The tool specification %q has too many components - please supply a colon-separated provider, source, and optional version.", toolSpec)
+func (j JKL) Install(specStr string) (installedVersion string, err error) {
+	debugLog.Printf("Installing tool specification %q\n", specStr)
+	toolSpec, err := j.NewToolSpec(specStr)
+	if err != nil {
+		return "", err
 	}
-	if len(toolSpecFields) < 2 {
-		return "", fmt.Errorf("the tool specification %q does not have enough components - please supply a colon-separated provider, source, and optional version", toolSpec)
-	}
-	if len(toolSpecFields) == 3 {
-		toolVersion = toolSpecFields[2]
-	}
-	toolProvider = strings.ToLower(toolSpecFields[0])
-	toolSource = toolSpecFields[1]
-	var toolName, actualToolVersion, downloadPath string
-	switch toolProvider {
+	switch toolSpec.provider {
 	case "github", "gh":
-		g, err := NewGithubRepo(toolSource)
-		if err != nil {
-			return "", err
-		}
-		downloadPath, actualToolVersion, toolName, err = g.DownloadReleaseForVersion(toolVersion)
+		err := GithubDownload(&toolSpec)
 		if err != nil {
 			return "", err
 		}
 	case "hashicorp", "hashi":
-		h, err := NewHashicorpProduct(toolSource)
-		if err != nil {
-			return "", err
-		}
-		toolName = toolSource
-		downloadPath, actualToolVersion, err = h.DownloadReleaseForVersion(toolVersion)
+		/*
+		   h, err := NewHashicorpProduct(toolSpec.source)
+		   		if err != nil {
+		   			return "", err
+		   		}
+		   		downloadPath, actualToolVersion, err = h.DownloadReleaseForVersion(toolSpec.version)
+		*/
+		err := HashicorpDownload(&toolSpec)
 		if err != nil {
 			return "", err
 		}
 	default:
-		return "", fmt.Errorf("unknown tool provider %q", toolProvider)
+		return "", fmt.Errorf("unknown tool provider %q", toolSpec.provider)
 	}
-	wasExtracted, err := ExtractFile(downloadPath)
+	wasExtracted, err := ExtractFile(toolSpec.downloadPath)
 	if err != nil {
 		return "", err
 	}
-	var extractedToolBinary string
-	extractedToolBinary = downloadPath // non-archived binary
+	var finalBinary string
 	if wasExtracted {
-		extractedToolBinary = fmt.Sprintf("%s/%s", filepath.Dir(downloadPath), toolName)
+		debugLog.Printf("using final binary for extracted file with tool name %q\n", toolSpec.name)
+		finalBinary = fmt.Sprintf("%s/%s", filepath.Dir(toolSpec.downloadPath), toolSpec.name)
+	} else {
+		finalBinary = toolSpec.downloadPath
 	}
-	installDest := fmt.Sprintf("%s/%s/%s/%s", j.installsDir, toolName, actualToolVersion, toolName)
-	err = CopyExecutableToCreatedDir(extractedToolBinary, installDest)
+	installDest := fmt.Sprintf("%s/%s/%s/%s", j.installsDir, toolSpec.name, toolSpec.version, toolSpec.name)
+	err = CopyExecutableToCreatedDir(finalBinary, installDest)
 	if err != nil {
 		return "", err
 	}
-	err = j.createShim(toolName)
+	err = j.createShim(toolSpec.name)
 	if err != nil {
 		return "", err
 	}
-	debugLog.Printf("Installed version %q", actualToolVersion)
-	return actualToolVersion, nil
+	debugLog.Printf("Installed version %q", toolSpec.version)
+	return toolSpec.version, nil
 }
 
 // CreateShim creates a symbolic link for the specified tool name, pointing to
@@ -257,39 +245,6 @@ func (j JKL) createShim(binaryName string) error {
 	return fmt.Errorf("shim %s already exists but points to %q", shimPath, shimDest)
 }
 
-// listInstalledTools returns a list of tools with at least one version
-// installed.
-// A missing JKL.installsDir is not an error and will return 0 tools
-// installed.
-func (j JKL) listInstalledTools() (toolNames []string, err error) {
-	fileSystem := os.DirFS(j.installsDir)
-	toolNames = make([]string, 0)
-	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		if !errors.Is(err, fs.ErrNotExist) && err != nil {
-			return err
-		}
-		if path != "." && d.IsDir() {
-			_, hasVersions, err := j.listInstalledVersionsOfTool(path)
-			if err != nil {
-				return err
-			}
-			if hasVersions {
-				toolNames = append(toolNames, path)
-				return nil
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(toolNames) == 0 {
-		return nil, nil
-	}
-	sort.Strings(toolNames)
-	return toolNames, nil
-}
-
 func (j JKL) displayInstalledTools(output io.Writer) error {
 	toolNames, err := j.listInstalledTools()
 	if err != nil {
@@ -299,48 +254,6 @@ func (j JKL) displayInstalledTools(output io.Writer) error {
 		fmt.Fprintln(output, v)
 	}
 	return nil
-}
-
-// getPathForToolDesiredVersion returns the full path to the desired version of the
-// specified command. The version is obtained from configuration files or the
-// command-specific environment variable.
-func (j JKL) getPathForToolDesiredVersion(toolName, toolVersion string) (installedPath string, err error) {
-	installedPath = fmt.Sprintf("%[1]s/%[2]s/%[3]s/%[2]s", j.installsDir, toolName, toolVersion)
-	_, err = os.Stat(installedPath)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", err
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		debugLog.Printf("desired installed tool %q not found", installedPath)
-		return "", nil
-	}
-	debugLog.Printf("installed path for %s is %q\n", toolName, installedPath)
-	return installedPath, nil
-}
-
-// listInstalledVersionsOfTool returns a list of installed versions for
-// the specified tool.
-func (j JKL) listInstalledVersionsOfTool(toolName string) (versions []string, found bool, err error) {
-	fileSystem := os.DirFS(filepath.Join(j.installsDir, toolName))
-	versions = make([]string, 0)
-	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if path != "." && d.IsDir() {
-			versions = append(versions, path)
-			found = true
-			return nil
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, false, err
-	}
-	if !found {
-		return nil, false, nil
-	}
-	return versions, true, nil
 }
 
 func (j JKL) displayInstalledVersionsOfTool(output io.Writer, toolName string) error {
@@ -357,59 +270,4 @@ func (j JKL) displayInstalledVersionsOfTool(output io.Writer, toolName string) e
 		fmt.Fprintln(output, v)
 	}
 	return nil
-}
-
-// getDesiredVersionOfTool returns the version of the specified command
-// that is defined in configuration files or the command-specific environment
-// variable. IF the specified version is `latest`, the latest installed
-// version will be returned.
-func (j JKL) getDesiredVersionOfTool(toolName string) (desiredVersion string, found bool, err error) {
-	envVarName := j.getEnvVarNameForToolDesiredVersion(toolName)
-	desiredVersion = os.Getenv(envVarName)
-	if desiredVersion == "" {
-		debugLog.Printf("environment variable %q is not set, looking in config files for the %s version", envVarName, toolName)
-		var ok bool
-		// ToDo: Our own config file is not yet implemented.
-		desiredVersion, ok, err = FindASDFToolVersion(toolName)
-		if err != nil {
-			return "", false, err
-		}
-		if !ok {
-			debugLog.Printf("No desired version specified for %q", toolName)
-			return "", false, nil
-		}
-	}
-	debugLog.Printf("version %s specified for %q\n", desiredVersion, toolName)
-	if strings.ToLower(desiredVersion) == "latest" {
-		return j.getLatestInstalledVersionOfTool(toolName)
-	}
-	return desiredVersion, true, nil
-}
-
-// getEnvVarNameForToolDesiredVersion returns the name of the environment
-// variable that JKL will use to determine the desired version for a specified
-// command.
-func (j JKL) getEnvVarNameForToolDesiredVersion(toolName string) string {
-	// ToDo: Make this env var format configurable in the constructor?
-	return fmt.Sprintf("JKL_%s", strings.ToUpper(strings.ReplaceAll(toolName, "-", "_")))
-}
-
-func (j JKL) getLatestInstalledVersionOfTool(toolName string) (latestVersion string, found bool, err error) {
-	versions, ok, err := j.listInstalledVersionsOfTool(toolName)
-	if err != nil {
-		return "", false, err
-	}
-	if !ok {
-		debugLog.Printf("no versions found for %q while looking for the latest installed version", toolName)
-		return "", false, nil
-	}
-	sortedVersions := make([]*hashicorpversion.Version, len(versions))
-	for i, v := range versions {
-		hv, _ := hashicorpversion.NewVersion(v)
-		sortedVersions[i] = hv
-	}
-	sort.Sort(hashicorpversion.Collection(sortedVersions))
-	latestVersion = sortedVersions[len(sortedVersions)-1].Original()
-	debugLog.Printf("the latest installed version of %s is %s", toolName, latestVersion)
-	return latestVersion, true, nil
 }

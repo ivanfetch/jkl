@@ -13,6 +13,24 @@ import (
 	"strings"
 )
 
+// HashicorpDownload accepts a type toolSpec and populates it with the path of the
+// downloaded file and name of the tool. The version that was downloaded may also be updated, in cases where a partial or
+// "latest" version is specified.
+func HashicorpDownload(TS *ToolSpec) error {
+	h, err := NewHashicorpProduct(TS.source)
+	if err != nil {
+		return err
+	}
+	downloadPath, downloadVersion, err := h.DownloadReleaseForVersion(TS.version)
+	if err != nil {
+		return err
+	}
+	TS.name = TS.source
+	TS.version = downloadVersion
+	TS.downloadPath = downloadPath
+	return nil
+}
+
 type HashicorpClient struct {
 	httpClient *http.Client
 	apiHost    string

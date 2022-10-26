@@ -13,6 +13,26 @@ import (
 	"strings"
 )
 
+// GithubDownload accepts a type toolSpec and populates it with the path of the
+// downloaded file and the name of the tool, as
+// determined by its assets. The toolSpec may also be updated with the
+// version of the tool that was downloaded, in cases where a partial or
+// "latest" version is specified.
+func GithubDownload(TS *ToolSpec) error {
+	g, err := NewGithubRepo(TS.source)
+	if err != nil {
+		return err
+	}
+	downloadPath, downloadVersion, downloadName, err := g.DownloadReleaseForVersion(TS.version)
+	if err != nil {
+		return err
+	}
+	TS.name = downloadName
+	TS.version = downloadVersion
+	TS.downloadPath = downloadPath
+	return nil
+}
+
 type GithubClient struct {
 	token, apiHost string
 	httpClient     *http.Client
