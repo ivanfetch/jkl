@@ -109,41 +109,16 @@ jkl list rbac-lookup`,
 	return nil
 }
 
-// RunShim executes the desired version of the tool which JKL was called as a
-// shim, passing the remaining command-line arguments to the actual tool being
+// RunShim executes the desired version of the tool which the JKL shim was called.
+// The remaining command-line arguments are passed to the actual tool being
 // executed.
 func (j JKL) RunShim(args []string) error {
 	if os.Getenv("JKL_DEBUG") != "" {
 		EnableDebugOutput()
 	}
 	calledProgName := filepath.Base(args[0])
-	desiredVersion, ok, err := j.getDesiredVersionOfTool(calledProgName)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		availableVersions, foundVersions, err := j.listInstalledVersionsOfTool(calledProgName)
-		if err != nil {
-			return err
-		}
-		if foundVersions && len(availableVersions) > 1 {
-			return fmt.Errorf(`please specify which version of %s you would like to run, by setting the %s environment variable to a valid version, or to "latest" to use the latest version already installed.`, calledProgName, j.getEnvVarNameForToolDesiredVersion(calledProgName))
-		}
-		if foundVersions {
-			desiredVersion = availableVersions[0]
-			debugLog.Printf("selecting only available version %s for tool %s", desiredVersion, calledProgName)
-		}
-	}
-	installedCommandPath, err := j.getPathForToolDesiredVersion(calledProgName, desiredVersion)
-	if err != nil {
-		return err
-	}
-	if installedCommandPath == "" {
-		// Can we install the command version at this point? We don't know where the
-		// command came from. LOL
-		return fmt.Errorf("Version %s of %s is not installed", desiredVersion, calledProgName)
-	}
-	err = RunCommand(append([]string{installedCommandPath}, args[1:]...))
+	tool := j.getManagedTool(calledProgName)
+	err := tool.Run(args[1:])
 	if err != nil {
 		return err
 	}

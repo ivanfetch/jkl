@@ -12,57 +12,114 @@ import (
 	hashicorpversion "github.com/hashicorp/go-version"
 )
 
-// getPathForToolDesiredVersion returns the full path to the desired version of the
-// specified command. The version is obtained from configuration files or the
-// command-specific environment variable.
-func (j JKL) getPathForToolDesiredVersion(toolName, toolVersion string) (installedPath string, err error) {
-	installedPath = fmt.Sprintf("%[1]s/%[2]s/%[3]s/%[2]s", j.installsDir, toolName, toolVersion)
-	_, err = os.Stat(installedPath)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", err
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		debugLog.Printf("desired installed tool %q not found", installedPath)
-		return "", nil
-	}
-	debugLog.Printf("installed path for %s is %q\n", toolName, installedPath)
-	return installedPath, nil
+// managedTool represents a tool that JKL has already installed.
+type managedTool struct {
+	name string
+	jkl  *JKL
 }
 
-// listInstalledTools returns a list of tools with at least one version
-// installed.
-// A missing JKL.installsDir is not an error and will return 0 tools
-// installed.
-func (j JKL) listInstalledTools() (toolNames []string, err error) {
-	fileSystem := os.DirFS(j.installsDir)
-	toolNames = make([]string, 0)
-	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
-		if !errors.Is(err, fs.ErrNotExist) && err != nil {
+// getManagedTool returns a type managedTool, with its name set to the
+// specified tool name.
+func (j JKL) getManagedTool(name string) *managedTool {
+	tool := &managedTool{
+		name: name,
+		jkl:  &j,
+	}
+	return tool
+}
+
+// run executes the desired version of the specified tool. The desired version is
+// determined via user configuration.
+func (t managedTool) Run(args []string) error {
+	desiredVersion, ok, err := t.desiredVersion()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		availableVersions, foundAnyVersions, err := t.listInstalledVersions()
+		if err != nil {
 			return err
 		}
-		if path != "." && d.IsDir() {
-			_, hasVersions, err := j.listInstalledVersionsOfTool(path)
-			if err != nil {
-				return err
-			}
-			if hasVersions {
-				toolNames = append(toolNames, path)
-				return nil
-			}
+		if foundAnyVersions && len(availableVersions) > 1 {
+			return fmt.Errorf(`please specify which version of %s you would like to run, by setting the %s environment variable to a valid version, or to "latest" to use the latest installed version.`, t.name, t.envVarName())
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		if foundAnyVersions {
+			desiredVersion = availableVersions[0]
+			debugLog.Printf("selecting the only available version %s for tool %s", desiredVersion, t.name)
+		}
 	}
-	sort.Strings(toolNames)
-	return toolNames, nil
+	installedCommandPath, ok, err := t.path(desiredVersion)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("version %s of %s is not installed by %[3]s, please see the `%[3]s install` command to install it", desiredVersion, t.name, callMeProgName)
+	}
+	err = RunCommand(append([]string{installedCommandPath}, args...))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-// listInstalledVersionsOfTool returns a list of installed versions for
-// the specified tool.
-func (j JKL) listInstalledVersionsOfTool(toolName string) (versions []string, found bool, err error) {
-	fileSystem := os.DirFS(filepath.Join(j.installsDir, toolName))
+// path returns the full path to the specified version of the
+// managedTool.
+func (t managedTool) path(version string) (installedPath string, versionWasFound bool, err error) {
+	for i, possibleVersion := range []string{version, toggleVPrefix(version)} {
+		installedPath = fmt.Sprintf("%[1]s/%[2]s/%[3]s/%[2]s", t.jkl.installsDir, t.name, possibleVersion)
+		_, err = os.Stat(installedPath)
+		if err == nil {
+			debugLog.Printf("installed path for %s is %q\n", t.name, installedPath)
+			return installedPath, true, nil
+		}
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "", false, err
+		}
+		if i == 1 && errors.Is(err, fs.ErrNotExist) { // last possible version not found
+			debugLog.Printf("version %q of tool %q is not installed, path %q not found with and without a leading v in the version number", version, t.name, installedPath)
+			return "", false, nil
+		}
+	}
+	return "", false, fmt.Errorf("unexpected loop fall-through finding the path for %q version %q", t.name, version)
+}
+
+// desiredVersion returns the version of the specified tool desired by
+// configuration files or an environment variable. IF the version is `latest`, the latest installed version will be returned.
+func (t managedTool) desiredVersion() (desiredVersion string, found bool, err error) {
+	envVarName := t.envVarName()
+	desiredVersion = os.Getenv(envVarName)
+	if desiredVersion == "" {
+		debugLog.Printf("environment variable %q is not set, looking in config files for the desired %s version", envVarName, t.name)
+		var ok bool
+		// ToDo: Our own config file is not yet implemented.
+		desiredVersion, ok, err = FindASDFToolVersion(t.name)
+		if err != nil {
+			return "", false, err
+		}
+		if !ok {
+			debugLog.Printf("No desired version specified for %q", t.name)
+			return "", false, nil
+		}
+	}
+	debugLog.Printf("desired version %q specified for %s\n", desiredVersion, t.name)
+	if strings.ToLower(desiredVersion) == "latest" {
+		return t.latestInstalledVersion()
+	}
+	return desiredVersion, true, nil
+}
+
+// envVarName returns the name of the environment
+// variable that JKL will use to determine the desired version for the specified
+// tool.
+func (t managedTool) envVarName() string {
+	// ToDo: Make this env var format configurable in the JKL constructor?
+	return fmt.Sprintf("JKL_%s", strings.ToUpper(strings.ReplaceAll(t.name, "-", "_")))
+}
+
+// listInstalledVersions returns a sorted list of installed versions for
+// the specified tool. The newest version will be last in the slice.
+func (t managedTool) listInstalledVersions() (versions []string, found bool, err error) {
+	fileSystem := os.DirFS(filepath.Join(t.jkl.installsDir, t.name))
 	versions = make([]string, 0)
 	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -81,58 +138,61 @@ func (j JKL) listInstalledVersionsOfTool(toolName string) (versions []string, fo
 	if !found {
 		return nil, false, nil
 	}
-	return versions, true, nil
-}
-
-// getDesiredVersionOfTool returns the version of the specified tool according
-// to configuration files or an environment variable. IF the specified version is `latest`, the latest installed version will be returned.
-func (j JKL) getDesiredVersionOfTool(toolName string) (desiredVersion string, found bool, err error) {
-	envVarName := j.getEnvVarNameForToolDesiredVersion(toolName)
-	desiredVersion = os.Getenv(envVarName)
-	if desiredVersion == "" {
-		debugLog.Printf("environment variable %q is not set, looking in config files for the %s version", envVarName, toolName)
-		var ok bool
-		// ToDo: Our own config file is not yet implemented.
-		desiredVersion, ok, err = FindASDFToolVersion(toolName)
-		if err != nil {
-			return "", false, err
-		}
-		if !ok {
-			debugLog.Printf("No desired version specified for %q", toolName)
-			return "", false, nil
-		}
-	}
-	debugLog.Printf("version %s specified for %q\n", desiredVersion, toolName)
-	if strings.ToLower(desiredVersion) == "latest" {
-		return j.getLatestInstalledVersionOfTool(toolName)
-	}
-	return desiredVersion, true, nil
-}
-
-// getEnvVarNameForToolDesiredVersion returns the name of the environment
-// variable that JKL will use to determine the desired version for a specified
-// tool.
-func (j JKL) getEnvVarNameForToolDesiredVersion(toolName string) string {
-	// ToDo: Make this env var format configurable in the constructor?
-	return fmt.Sprintf("JKL_%s", strings.ToUpper(strings.ReplaceAll(toolName, "-", "_")))
-}
-
-func (j JKL) getLatestInstalledVersionOfTool(toolName string) (latestVersion string, found bool, err error) {
-	versions, ok, err := j.listInstalledVersionsOfTool(toolName)
-	if err != nil {
-		return "", false, err
-	}
-	if !ok {
-		debugLog.Printf("no versions found for %q while looking for the latest installed version", toolName)
-		return "", false, nil
-	}
 	sortedVersions := make([]*hashicorpversion.Version, len(versions))
 	for i, v := range versions {
 		hv, _ := hashicorpversion.NewVersion(v)
 		sortedVersions[i] = hv
 	}
 	sort.Sort(hashicorpversion.Collection(sortedVersions))
-	latestVersion = sortedVersions[len(sortedVersions)-1].Original()
-	debugLog.Printf("the latest installed version of %s is %s", toolName, latestVersion)
+	for i, v := range sortedVersions { // reorder the original version strings by Hashicorp-sorted order.
+		versions[i] = v.Original()
+	}
+	return versions, true, nil
+}
+
+// latestInstalledVersion returns the latest version number that is installed
+// of the specified tool.
+func (t managedTool) latestInstalledVersion() (latestVersion string, found bool, err error) {
+	versions, ok, err := t.listInstalledVersions()
+	if err != nil {
+		return "", false, err
+	}
+	if !ok {
+		debugLog.Printf("no versions found for %q while looking for the latest installed version", t.name)
+		return "", false, nil
+	}
+	latestVersion = versions[len(versions)-1]
+	debugLog.Printf("the latest installed version of %s is %s", t.name, latestVersion)
 	return latestVersion, true, nil
+}
+
+// listInstalledTools returns a list of tools with at least one version
+// installed.
+// A missing JKL.installsDir is not an error and will return 0 tools
+// installed.
+func (j JKL) listInstalledTools() (toolNames []string, err error) {
+	fileSystem := os.DirFS(j.installsDir)
+	toolNames = make([]string, 0)
+	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+		if !errors.Is(err, fs.ErrNotExist) && err != nil {
+			return err
+		}
+		if path != "." && d.IsDir() {
+			tool := j.getManagedTool(path)
+			_, hasVersions, err := tool.listInstalledVersions()
+			if err != nil {
+				return err
+			}
+			if hasVersions {
+				toolNames = append(toolNames, path)
+				return nil
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(toolNames)
+	return toolNames, nil
 }

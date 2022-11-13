@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"time"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -165,13 +164,6 @@ func (j JKL) Install(specStr string) (installedVersion string, err error) {
 			return "", err
 		}
 	case "hashicorp", "hashi":
-		/*
-		   h, err := NewHashicorpProduct(toolSpec.source)
-		   		if err != nil {
-		   			return "", err
-		   		}
-		   		downloadPath, actualToolVersion, err = h.DownloadReleaseForVersion(toolSpec.version)
-		*/
 		err := HashicorpDownload(&toolSpec)
 		if err != nil {
 			return "", err
@@ -185,10 +177,11 @@ func (j JKL) Install(specStr string) (installedVersion string, err error) {
 	}
 	var finalBinary string
 	if wasExtracted {
-		debugLog.Printf("using final binary for extracted file with tool name %q\n", toolSpec.name)
 		finalBinary = fmt.Sprintf("%s/%s", filepath.Dir(toolSpec.downloadPath), toolSpec.name)
+		debugLog.Printf("using extracted binary %q for tool %s\n", finalBinary, toolSpec.name)
 	} else {
 		finalBinary = toolSpec.downloadPath
+		debugLog.Printf("using non-extracted binary %q for tool %s\n", finalBinary, toolSpec.name)
 	}
 	installDest := fmt.Sprintf("%s/%s/%s/%s", j.installsDir, toolSpec.name, toolSpec.version, toolSpec.name)
 	err = CopyExecutableToCreatedDir(finalBinary, installDest)
@@ -199,7 +192,7 @@ func (j JKL) Install(specStr string) (installedVersion string, err error) {
 	if err != nil {
 		return "", err
 	}
-	debugLog.Printf("Installed version %q", toolSpec.version)
+	debugLog.Printf("Installed %s version %q", toolSpec.name, toolSpec.version)
 	return toolSpec.version, nil
 }
 
@@ -257,7 +250,8 @@ func (j JKL) displayInstalledTools(output io.Writer) error {
 }
 
 func (j JKL) displayInstalledVersionsOfTool(output io.Writer, toolName string) error {
-	toolVersions, ok, err := j.listInstalledVersionsOfTool(toolName)
+	tool := j.getManagedTool(toolName)
+	toolVersions, ok, err := tool.listInstalledVersions()
 	if err != nil {
 		return fmt.Errorf("cannot list installed versions of %s: %v", toolName, err)
 	}
@@ -265,7 +259,6 @@ func (j JKL) displayInstalledVersionsOfTool(output io.Writer, toolName string) e
 		fmt.Fprintf(output, "%s is not installed\n", toolName)
 		return nil
 	}
-	sort.Strings(toolVersions)
 	for _, v := range toolVersions {
 		fmt.Fprintln(output, v)
 	}
