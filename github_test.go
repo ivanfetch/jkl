@@ -28,6 +28,7 @@ func TestGithubMatchTagFromPartialVersion(t *testing.T) {
 		{
 			ReleaseName: "1.0.3-rc1",
 			TagName:     "1.0.3-rc1",
+			PreRelease:  true,
 		},
 		{
 			ReleaseName: "2.0.1", // skipped 2.0.0
@@ -48,6 +49,10 @@ func TestGithubMatchTagFromPartialVersion(t *testing.T) {
 		{
 			ReleaseName: "3.0.3",
 			TagName:     "3.0.3",
+		},
+		{
+			ReleaseName: "jq 1.6",
+			TagName:     "jq-1.6",
 		},
 	}
 
@@ -75,13 +80,19 @@ func TestGithubMatchTagFromPartialVersion(t *testing.T) {
 			wantTag:     "2.0.1",
 			expectMatch: true,
 		},
+		{
+			description: "match tag (with extraneous text) jq-1.6 from partial version 1.6",
+			version:     "1.6",
+			wantTag:     "jq-1.6",
+			expectMatch: true,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			gotTag, gotMatch := fakeGithubReleases.MatchTagFromPartialVersion(tc.version)
 			if tc.expectMatch && !gotMatch {
-				t.Fatal("expected version to match a tag")
+				t.Fatal("expected version to match a tag, try running tests with the JKL_DEBUG environment variable set for more information")
 			}
 			if !tc.expectMatch && gotMatch {
 				t.Fatalf("unexpectedly matched tag %q to version %q\n", gotTag, tc.version)

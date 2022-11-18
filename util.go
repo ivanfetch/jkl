@@ -211,7 +211,7 @@ func getAliasesForArchitecture(arch string) []string {
 
 func getAliasesForOperatingSystem(OS string) []string {
 	OSAliases := map[string][]string{
-		"darwin": {"macos"},
+		"darwin": {"macos", "osx"},
 	}
 	return OSAliases[strings.ToLower(OS)]
 }

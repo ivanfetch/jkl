@@ -140,11 +140,16 @@ func (t managedTool) listInstalledVersions() (versions []string, found bool, err
 	}
 	sortedVersions := make([]*hashicorpversion.Version, len(versions))
 	for i, v := range versions {
-		hv, _ := hashicorpversion.NewVersion(v)
+		hv, err := hashicorpversion.NewVersion(v)
+		if err != nil {
+			debugLog.Printf("using string-sort while listing installed versions - the version %q can't be converted to a version, probably because it starts with extraneous text", v)
+			sort.Strings(versions)
+			return versions, true, nil
+		}
 		sortedVersions[i] = hv
 	}
 	sort.Sort(hashicorpversion.Collection(sortedVersions))
-	for i, v := range sortedVersions { // reorder the original version strings by Hashicorp-sorted order.
+	for i, v := range sortedVersions { // reorder the original version strings by hashicorpversion.Version order
 		versions[i] = v.Original()
 	}
 	return versions, true, nil

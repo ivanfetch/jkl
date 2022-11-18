@@ -77,7 +77,7 @@ type GithubAsset struct {
 	URL  string `json:"url"`
 }
 
-var semVerRE *regexp.Regexp = regexp.MustCompile(`(.+?)[-_]v?\d+.*`)
+var versionRE *regexp.Regexp = regexp.MustCompile(`(.+?)[-_]?v?\d+.*`)
 
 // NameWithoutVersionAndComponents returns the asset name minus its version
 // and any specified components. A component is matched with a preseeding
@@ -90,20 +90,25 @@ func (g GithubAsset) NameWithoutVersionAndComponents(components ...string) strin
 		strippedName = strings.Replace(strippedName, fmt.Sprintf("-%s", component), "", -1)
 		strippedName = strings.Replace(strippedName, fmt.Sprintf("_%s", component), "", -1)
 	}
-	withoutVersionMatches := semVerRE.FindStringSubmatch(strippedName)
+	// Attempt to strip what looks like a version, which may still be included in
+	// the name.
+	withoutVersionMatches := versionRE.FindStringSubmatch(strippedName)
 	if withoutVersionMatches != nil || len(withoutVersionMatches) >= 2 {
-		debugLog.Printf("the stripped name is %q", withoutVersionMatches[1])
+		debugLog.Printf("the stripped name after matching a version number is %q", withoutVersionMatches[1])
 		return withoutVersionMatches[1]
 	}
-	debugLog.Printf("unable to strip a version, the stripped name is %q", strippedName)
+	debugLog.Printf("the stripped name is %q", strippedName)
 	return strippedName
 }
 
 type GithubReleases []struct {
 	ReleaseName string `json:"name"`
 	TagName     string `json:"tag_name"`
+	PreRelease  bool   `json:"prerelease"`
 }
 
+// tagForReleaseName returns the tag for the specified release name. The
+// release name and its tag are often identical, but not always...
 func (g GithubReleases) tagForReleaseName(wantName string) (tag string, found bool) {
 	debugLog.Printf("Looking for name %q in %d releases\n", wantName, len(g))
 	for _, r := range g {
@@ -116,24 +121,40 @@ func (g GithubReleases) tagForReleaseName(wantName string) (tag string, found bo
 	return "", false
 }
 
+// MatchTagFromPartialVersion returns a latest tag matching an imcomplete
+// version E.G. return the latest tag x.y.z for a specified x.y, or x.
 func (g GithubReleases) MatchTagFromPartialVersion(pv string) (tag string, found bool) {
 	debugLog.Printf("matching tag from partial version %q\n", pv)
 	tags := make([]string, len(g))
 	for i, j := range g {
-		tags[i] = j.TagName
+		if !j.PreRelease {
+			tags[i] = j.TagName
+		}
 	}
 	sort.Strings(tags)
+	LCPV := strings.ToLower(pv)
 	// Iterate the Github release tags backwards.
 	for i := len(tags) - 1; i >= 0; i-- {
-		LCPV := strings.ToLower(pv)
 		LCThisTag := strings.ToLower(tags[i])
-		_, foundPreRelease := stringContainsOneOfLowerCase(tags[i], "-rc", "-alpha", "-beta")
-		if foundPreRelease {
-			debugLog.Printf("skipping pre-release tag %q\n", tags[i])
-			continue
-		}
 		if strings.HasPrefix(LCThisTag, LCPV) || strings.HasPrefix(LCThisTag, "v"+LCPV) {
 			debugLog.Printf("matched tag %q for partial version %s\n", tags[i], pv)
+			return tags[i], true
+		}
+	}
+	// Try matching with extraneous text removed from the beginning of the tag,
+	// like tags that include the repo or release name.
+	var stripPrefixRE *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z-_]+(v?\d+\..*)`)
+	for i := len(tags) - 1; i >= 0; i-- {
+		LCThisTag := strings.ToLower(tags[i])
+		strippedMatches := stripPrefixRE.FindStringSubmatch(LCThisTag)
+		if strippedMatches == nil || len(strippedMatches) < 2 {
+			debugLog.Printf("cannot strip extraneous text from tag %q\n", LCThisTag)
+			continue
+		}
+		strippedTag := strippedMatches[1]
+		debugLog.Printf("the stripped tag is %q", strippedTag)
+		if strings.HasPrefix(strippedTag, LCPV) || strings.HasPrefix(strippedTag, "v"+LCPV) {
+			debugLog.Printf("matched tag %q after stripping prefix %q, for partial version %s\n", tags[i], strippedTag, pv)
 			return tags[i], true
 		}
 	}
@@ -397,11 +418,11 @@ func (g GithubRepo) DownloadReleaseForTagOSAndArch(tag, OS, arch string) (filePa
 	if err != nil {
 		return "", "", err
 	}
-	return filePath, asset.NameWithoutVersionAndComponents(matchedOS, matchedArch), nil
+	return filePath, asset.NameWithoutVersionAndComponents(matchedOS, matchedArch, tag), nil
 }
 
 func (g GithubRepo) DownloadReleaseForTag(tag string) (binaryPath, assetBaseName string, err error) {
-	debugLog.Printf("downloading Github release %q for tag %q\n", tag, g.ownerAndRepo)
+	debugLog.Printf("downloading Github release %q for tag %q\n", g.ownerAndRepo, tag)
 	downloadedFile, assetBaseName, err := g.DownloadReleaseForTagOSAndArch(tag, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return "", "", err
@@ -416,6 +437,10 @@ func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (matchedAsset 
 		if foundOS && foundArch {
 			debugLog.Printf("matched this asset for OS %q and arch %q: %#v", OS, arch, asset)
 			return asset, matchedOS, matchedArch, true
+		}
+		if strings.EqualFold(OS, "linux") && strings.EqualFold(arch, "amd64") && strings.Contains(strings.ToLower(asset.Name), "linux64") {
+			debugLog.Printf("matched this asset against the combo-string linux64: %#v\n", asset)
+			return asset, "linux64", "linux64", true // OS and arch are linux64 to facilitate stripping components from the asset name
 		}
 	}
 	if strings.EqualFold(OS, "darwin") && strings.EqualFold(arch, "arm64") {
