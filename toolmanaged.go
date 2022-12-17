@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/hashicorp/go-multierror"
 )
 
 // managedTool represents a tool that JKL has already installed.
@@ -67,7 +69,7 @@ func (t managedTool) path(version string) (installedPath string, versionWasFound
 		installedPath = fmt.Sprintf("%[1]s/%[2]s/%[3]s/%[2]s", t.jkl.installsDir, t.name, possibleVersion)
 		_, err = os.Stat(installedPath)
 		if err == nil {
-			debugLog.Printf("installed path for %s is %q\n", t.name, installedPath)
+			debugLog.Printf("found installed path for %s %s: %q\n", t.name, version, installedPath)
 			return installedPath, true, nil
 		}
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -79,6 +81,32 @@ func (t managedTool) path(version string) (installedPath string, versionWasFound
 		}
 	}
 	return "", false, fmt.Errorf("unexpected loop fall-through finding the path for %q version %q", t.name, version)
+}
+
+// uninstallVersion removes the specified version of the managed tool,
+// including it's containing directory which is named after the version.
+// No error is returned if the specified version is not found.
+func (t managedTool) uninstallVersion(version string) error {
+	binaryPath, versionFound, err := t.path(version)
+	if err != nil {
+		return err
+	}
+	if !versionFound {
+		debugLog.Printf("version %s of %s is not found and cannot be uninstalled", version, t.name)
+		return nil
+	}
+	debugLog.Printf("removing tool binary %s", binaryPath)
+	err = os.Remove(binaryPath)
+	if err != nil {
+		return err
+	}
+	parentPath := filepath.Dir(binaryPath)
+	debugLog.Printf("removing the versioned directory %q", parentPath)
+	err = os.Remove(parentPath)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // desiredVersion returns the version of the specified tool desired by
@@ -138,6 +166,43 @@ func (t managedTool) listInstalledVersions() (versions []string, found bool, err
 	}
 	sortedVersions := sortVersions(versions)
 	return sortedVersions, true, nil
+}
+
+func (t managedTool) uninstallAllVersions() error {
+	uninstallErrs := new(multierror.Error)
+	allVersions, foundAnyVersions, err := t.listInstalledVersions()
+	if err != nil {
+		return err
+	}
+	if !foundAnyVersions {
+		debugLog.Printf("no versions of %s are installed, nothing to uninstall", t.name)
+		return nil
+	}
+	for _, ver := range allVersions {
+		err := t.uninstallVersion(ver)
+		if err != nil {
+			debugLog.Printf("error uninstalling %s version %s: %v\n", t.name, ver, err)
+			uninstallErrs = multierror.Append(uninstallErrs, fmt.Errorf("uninstalling %s %s: %v", t.name, ver, err))
+		}
+	}
+	if len(uninstallErrs.Errors) > 0 {
+		return uninstallErrs
+	}
+	topLevelToolDir := filepath.Join(t.jkl.installsDir, t.name)
+	debugLog.Printf("removing top-level directory %s\n", topLevelToolDir)
+	err = os.Remove(topLevelToolDir)
+	if err != nil {
+		// Do not return an error if non-jkl-managed files are present, but make
+		// the condition discoverable if debug logging is enabled.
+		debugLog.Printf("cannot remove directory %q after having removed %s: %v\n", topLevelToolDir, t.name, err)
+	}
+	shim := filepath.Join(t.jkl.shimsDir, t.name)
+	debugLog.Printf("removing shim %s\n", shim)
+	err = os.Remove(shim)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("unable to remove shim %q while uninstalling all versions of %s: %v", shim, t.name, err)
+	}
+	return nil
 }
 
 // latestInstalledVersion returns the latest version number that is installed

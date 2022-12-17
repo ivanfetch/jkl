@@ -203,6 +203,27 @@ func (j JKL) Install(specStr string) (installedVersion string, err error) {
 	return toolSpec.version, nil
 }
 
+// Uninstall uninsalls the specified managedTool. All versions will be
+// uninstalled unless a version is specified.
+func (j JKL) Uninstall(toolNameAndVersion string) error {
+	toolFields := strings.Split(toolNameAndVersion, ":")
+	toolName := toolFields[0]
+	var toolVersion string
+	if len(toolFields) == 2 {
+		toolVersion = toolFields[1]
+	}
+	tool := j.getManagedTool(toolName)
+	if toolVersion == "" {
+		debugLog.Printf("uninstalling all versions of %s", toolName)
+		return tool.uninstallAllVersions()
+	}
+	err := tool.uninstallVersion(toolVersion)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // CreateShim creates a symbolic link for the specified tool name, pointing to
 // the JKL binary.
 func (j JKL) createShim(binaryName string) error {

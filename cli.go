@@ -53,6 +53,7 @@ func RunCLI(args []string, output, errOutput io.Writer) error {
 		},
 	}
 	rootCmd.AddCommand(versionCmd)
+
 	var installCmd = &cobra.Command{
 		Use:   "install <provider>:<source>[:version]",
 		Short: "Install a command-line tool",
@@ -83,6 +84,32 @@ Available providers are:
 		},
 	}
 	rootCmd.AddCommand(installCmd)
+
+	var uninstallCmd = &cobra.Command{
+		Use:   "uninstall <tool name>[:version]",
+		Short: "Uninstall a command-line tool",
+		Long: `Uninstall a command-line tool managed by JKL.
+
+	A tool version must be exact, as shown by: jkl list <tool name>
+	If no version is specified, all versions of the tool will be uninstalled.`,
+		Example: `	jkl uninstall rbac-lookup
+	jkl uninstall rbac-lookup:0.9.0`,
+		Aliases: []string{"remove", "uninst", "u", "rm"},
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return fmt.Errorf("Please specify which tool JKL should uninstall, using the form: ToolName[:version]\nThe `jkl list` command will show JKL-managed tools. Run %s uninstall -h for more information about uninstallation.", callMeProgName)
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := j.Uninstall(args[0])
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	rootCmd.AddCommand(uninstallCmd)
 
 	var listCmd = &cobra.Command{
 		Use:   "list [<tool name>]",

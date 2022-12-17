@@ -77,7 +77,7 @@ type GithubAsset struct {
 	URL  string `json:"url"`
 }
 
-var versionRE *regexp.Regexp = regexp.MustCompile(`(.+?)[-_]?v?\d+.*`)
+var versionRE *regexp.Regexp = regexp.MustCompile(`(.+?)[-_]?v?[-_]?\d+.*`)
 
 // NameWithoutVersionAndComponents returns the asset name minus its version
 // and any specified components. A component is matched with a preseeding
@@ -94,8 +94,13 @@ func (g GithubAsset) NameWithoutVersionAndComponents(components ...string) strin
 	// the name.
 	withoutVersionMatches := versionRE.FindStringSubmatch(strippedName)
 	if withoutVersionMatches != nil || len(withoutVersionMatches) >= 2 {
-		debugLog.Printf("the stripped name after matching a version number is %q", withoutVersionMatches[1])
+		debugLog.Printf("the stripped name after matching a version number and extension is %q", withoutVersionMatches[1])
 		return withoutVersionMatches[1]
+	}
+	// Attemptto strip a file extension because the above regular expression
+	// failed.
+	for _, ext := range []string{".tar.gz", ".tar", ".tgz", ".tar.bz2", ".zip"} {
+		strippedName = strings.Replace(strippedName, ext, "", -1)
 	}
 	debugLog.Printf("the stripped name is %q", strippedName)
 	return strippedName

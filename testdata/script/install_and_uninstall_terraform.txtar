@@ -6,6 +6,13 @@ exec jkl install hashi:terraform:1.0.0
 ! stderr .
 exec terraform version
 stdout 'Terraform v1.0.0'
+# This version is used below, for uninstallation
+exec jkl install hashi:terraform:1.0.2
+! stdout .
+! stderr .
+env JKL_TERRAFORM=1.0.2
+exec terraform version
+stdout 'Terraform v1.0.2'
 # This version requires jkl to fetch jultiple pages of Hashicorp releases
 exec jkl install hashicorp:terraform:0.11.15
 ! stdout .
@@ -17,3 +24,19 @@ stdout 'Terraform v0.11.15'
 ! exec jkl install hashicorp:terraform:10.2
 ! stdout .
 stderr 'Error: no version found to match "10.2"'
+exec jkl uninstall terraform:1.0.0
+! stdout .
+! stderr .
+exec jkl list terraform
+! stdout 1.0.0
+# These versions should still be installed
+stdout 0.11.15
+stdout 1.0.2
+exec jkl uninstall terraform
+! stdout .
+! stderr .
+! exec jkl list terraform
+! stdout .
+stderr 'no such file or directory'
+# The shim should have also ben removed
+! exists $HOME/.jkl/bin/terraform

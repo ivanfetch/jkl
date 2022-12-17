@@ -17,9 +17,10 @@ import (
 // true if a match is found, and the original substring that matched.
 // Substrings are matched using lower-case.
 func stringContainsOneOfLowerCase(s, firstSubstr string, additionalSubstrs ...string) (match string, found bool) {
-	for _, substr := range append([]string{firstSubstr}, additionalSubstrs...) {
-		if strings.Contains(strings.ToLower(s), strings.ToLower(substr)) {
-			return substr, true
+	allSubStrings := append([]string{firstSubstr}, additionalSubstrs...)
+	for i := len(allSubStrings) - 1; i >= 0; i-- {
+		if strings.Contains(strings.ToLower(s), strings.ToLower(allSubStrings[i])) {
+			return allSubStrings[i], true
 		}
 	}
 	return "", false
@@ -214,7 +215,7 @@ func getAliasesForArchitecture(arch string) []string {
 
 func getAliasesForOperatingSystem(OS string) []string {
 	OSAliases := map[string][]string{
-		"darwin": {"macos", "osx"},
+		"darwin": {"macos", "osx", "apple-darwin"},
 	}
 	return OSAliases[strings.ToLower(OS)]
 }
