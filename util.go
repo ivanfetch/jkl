@@ -7,7 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	hashicorpversion "github.com/hashicorp/go-version"
 )
 
 // stringContainsOneOfLowerCase reports the first substring contained in s, returning
@@ -214,4 +217,31 @@ func getAliasesForOperatingSystem(OS string) []string {
 		"darwin": {"macos", "osx"},
 	}
 	return OSAliases[strings.ToLower(OS)]
+}
+
+// SortVersions returns the slice of strings sorted as semver version numbers.
+// Any empty strings are replaced with version 0.0.0 before being sorted, to
+// retain the size of the slice.
+func sortVersions(versions []string) []string {
+	debugLog.Printf("sorting %d versions: %v", len(versions), versions)
+	sortedVersions := make([]*hashicorpversion.Version, len(versions))
+	for i, v := range versions {
+		if v == "" {
+			debugLog.Printf("WARNING: the version at index %d is an empty string, using 0.0.0 instead", i)
+			v = "0.0.0"
+		}
+		hv, err := hashicorpversion.NewVersion(v)
+		if err != nil {
+			debugLog.Printf("using string-sort while listing installed versions - the version %q can't be converted to a version, probably because it starts with extraneous text: %v", v, err)
+			sort.Strings(versions)
+			return versions
+		}
+		sortedVersions[i] = hv
+	}
+	sort.Sort(hashicorpversion.Collection(sortedVersions))
+	for i, v := range sortedVersions { // reorder the original version strings by hashicorpversion.Version order
+		versions[i] = v.Original()
+	}
+	debugLog.Printf("sorted versions are: %v", versions)
+	return versions
 }

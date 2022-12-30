@@ -26,6 +26,10 @@ func TestGithubMatchTagFromPartialVersion(t *testing.T) {
 			TagName:     "1.0.2",
 		},
 		{
+			ReleaseName: "release with no version",
+			TagName:     "",
+		},
+		{
 			ReleaseName: "1.0.3-rc1",
 			TagName:     "1.0.3-rc1",
 			PreRelease:  true,

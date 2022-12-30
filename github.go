@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
 	"strings"
 )
 
@@ -132,21 +131,21 @@ func (g GithubReleases) MatchTagFromPartialVersion(pv string) (tag string, found
 			tags[i] = j.TagName
 		}
 	}
-	sort.Strings(tags)
+	sortedTags := sortVersions(tags)
 	LCPV := strings.ToLower(pv)
 	// Iterate the Github release tags backwards.
-	for i := len(tags) - 1; i >= 0; i-- {
-		LCThisTag := strings.ToLower(tags[i])
+	for i := len(sortedTags) - 1; i >= 0; i-- {
+		LCThisTag := strings.ToLower(sortedTags[i])
 		if strings.HasPrefix(LCThisTag, LCPV) || strings.HasPrefix(LCThisTag, "v"+LCPV) {
-			debugLog.Printf("matched tag %q for partial version %s\n", tags[i], pv)
-			return tags[i], true
+			debugLog.Printf("matched tag %q for partial version %s\n", sortedTags[i], pv)
+			return sortedTags[i], true
 		}
 	}
 	// Try matching with extraneous text removed from the beginning of the tag,
 	// like tags that include the repo or release name.
 	var stripPrefixRE *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z-_]+(v?\d+\..*)`)
-	for i := len(tags) - 1; i >= 0; i-- {
-		LCThisTag := strings.ToLower(tags[i])
+	for i := len(sortedTags) - 1; i >= 0; i-- {
+		LCThisTag := strings.ToLower(sortedTags[i])
 		strippedMatches := stripPrefixRE.FindStringSubmatch(LCThisTag)
 		if strippedMatches == nil || len(strippedMatches) < 2 {
 			debugLog.Printf("cannot strip extraneous text from tag %q\n", LCThisTag)
@@ -155,8 +154,8 @@ func (g GithubReleases) MatchTagFromPartialVersion(pv string) (tag string, found
 		strippedTag := strippedMatches[1]
 		debugLog.Printf("the stripped tag is %q", strippedTag)
 		if strings.HasPrefix(strippedTag, LCPV) || strings.HasPrefix(strippedTag, "v"+LCPV) {
-			debugLog.Printf("matched tag %q after stripping prefix %q, for partial version %s\n", tags[i], strippedTag, pv)
-			return tags[i], true
+			debugLog.Printf("matched tag %q after stripping prefix %q, for partial version %s\n", sortedTags[i], strippedTag, pv)
+			return sortedTags[i], true
 		}
 	}
 	debugLog.Printf("no partial match for %s\n", pv)

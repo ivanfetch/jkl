@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	hashicorpversion "github.com/hashicorp/go-version"
 )
 
 // managedTool represents a tool that JKL has already installed.
@@ -138,21 +136,8 @@ func (t managedTool) listInstalledVersions() (versions []string, found bool, err
 	if !found {
 		return nil, false, nil
 	}
-	sortedVersions := make([]*hashicorpversion.Version, len(versions))
-	for i, v := range versions {
-		hv, err := hashicorpversion.NewVersion(v)
-		if err != nil {
-			debugLog.Printf("using string-sort while listing installed versions - the version %q can't be converted to a version, probably because it starts with extraneous text", v)
-			sort.Strings(versions)
-			return versions, true, nil
-		}
-		sortedVersions[i] = hv
-	}
-	sort.Sort(hashicorpversion.Collection(sortedVersions))
-	for i, v := range sortedVersions { // reorder the original version strings by hashicorpversion.Version order
-		versions[i] = v.Original()
-	}
-	return versions, true, nil
+	sortedVersions := sortVersions(versions)
+	return sortedVersions, true, nil
 }
 
 // latestInstalledVersion returns the latest version number that is installed
