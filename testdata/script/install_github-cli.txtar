@@ -1,0 +1,8 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+exec jkl install github:cli/cli:2.14.2
+! stdout .
+! stderr .
+exec gh version
+stdout 'gh version 2.14.2'

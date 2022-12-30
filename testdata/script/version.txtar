@@ -1,0 +1,3 @@
+exec jkl version
+stdout 'jkl version'
+stdout 'git commit '

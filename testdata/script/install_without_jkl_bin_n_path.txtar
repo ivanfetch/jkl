@@ -1,0 +1,5 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+exec jkl install hashi:terraform:1.0.0
+stdout 'WARNING: Please add the directory'
+stdout 'to your PATH environment variable'

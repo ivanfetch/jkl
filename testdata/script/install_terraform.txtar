@@ -1,0 +1,19 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+exec jkl install hashi:terraform:1.0.0
+! stdout .
+! stderr .
+exec terraform version
+stdout 'Terraform v1.0.0'
+# This version requires jkl to fetch jultiple pages of Hashicorp releases
+exec jkl install hashicorp:terraform:0.11.15
+! stdout .
+! stderr .
+env JKL_TERRAFORM=0.11.15
+exec terraform version
+stdout 'Terraform v0.11.15'
+# This version does not exist
+! exec jkl install hashicorp:terraform:10.2
+! stdout .
+stderr 'Error: no version found to match "10.2"'

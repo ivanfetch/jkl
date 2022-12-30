@@ -1,0 +1,19 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+exec jkl install github:ivanfetch/prme:0.0.4
+! stdout .
+! stderr .
+# prme -version exits with value 1
+! exec prme -version
+! stdout .
+# A prme bug does not present the version correctly
+stderr 'prme version ,'
+# Install the latest prme
+exec jkl install github:ivanfetch/prme
+! stdout .
+! stderr .
+env JKL_PRME=latest
+! exec prme -version
+! stdout .
+stderr 'prme version v0.0.6'
