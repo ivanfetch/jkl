@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -428,6 +429,49 @@ func (g GithubRepo) DownloadReleaseForTag(tag string) (binaryPath, assetBaseName
 		return "", "", err
 	}
 	return downloadedFile, assetBaseName, nil
+}
+
+// DownloadHelmBinaryForTag downloads a Helm binary from the Helm CDN, for the
+// specified version tag.
+func (g GithubRepo) DownloadHelmBinaryForTag(tag string) (binaryPath string, err error) {
+	URL := fmt.Sprintf("https://get.helm.sh/helm-%s-%s-%s.tar.gz", tag, runtime.GOOS, runtime.GOARCH)
+	binaryPath, err = g.DownloadExternalAsset(URL)
+	if err != nil {
+		return "", err
+	}
+	return binaryPath, nil
+}
+
+// DownloadExternalAsset returns the path to a file after downloading it from the specified
+// URL. The file is saved in a created temporary directory.
+func (g GithubRepo) DownloadExternalAsset(URL string) (filePath string, err error) {
+	req, err := http.NewRequest(http.MethodGet, URL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := g.client.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, URL)
+	}
+	tempDir, err := os.MkdirTemp(os.TempDir(), callMeProgName+"-")
+	if err != nil {
+		return "", err
+	}
+	filePath = fmt.Sprintf("%s/%s", tempDir, filepath.Base(URL))
+	f, err := os.Create(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return "", err
+	}
+	debugLog.Printf("downloaded %s to %s", URL, filePath)
+	return filePath, nil
 }
 
 func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (matchedAsset GithubAsset, matchedOS, matchedArch string, successfulMatch bool) {

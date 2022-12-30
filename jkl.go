@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -159,7 +160,13 @@ func (j JKL) Install(specStr string) (installedVersion string, err error) {
 	}
 	switch toolSpec.provider {
 	case "github", "gh":
-		err := GithubDownload(&toolSpec)
+		var err error
+		switch strings.ToLower(toolSpec.source) {
+		case "helm/helm":
+			err = HelmDownload(&toolSpec)
+		default:
+			err = GithubDownload(&toolSpec)
+		}
 		if err != nil {
 			return "", err
 		}
