@@ -70,6 +70,20 @@ func RunCLI(args []string, output, errOutput io.Writer) error {
 				return
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s version %s, git commit %s\n", callMeProgName, Version, GitCommit)
+			g, err := NewGithubRepo("ivanfetch/jkl")
+			if err != nil {
+				// Since the current version was displayed, do not display an error if unable to contact Github.
+				debugLog.Printf("unable to determine if there is a newer version of jkl: %v\n", err)
+				return
+			}
+			latestTag, err := g.GetTagForLatestRelease()
+			if err != nil {
+				debugLog.Printf("unable to determine if there is a newer version of jkl: %v\n", err)
+				return
+			}
+			if latestTag != "v"+Version {
+				fmt.Printf("The latest released version of jkl is %s - to update, run: jkl update\n", latestTag)
+			}
 		},
 	}
 	versionCmd.Flags().BoolVarP(&versionOnly, "version-only", "v", false, "Only output the jkl version.")
@@ -154,6 +168,26 @@ jkl list rbac-lookup`,
 		},
 	}
 	rootCmd.AddCommand(listCmd)
+
+	var updateSelfCmd = &cobra.Command{
+		Use:     "update",
+		Short:   "Update JKL to the latest release",
+		Long:    fmt.Sprintf("Update the JKL binary to the latest release. This will replace %s, retaining its current file mode.", j.executable),
+		Aliases: []string{"update-self", "update-jkl"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			newVersion, isNewVersion, err := j.UpdateSelf()
+			if err != nil {
+				return err
+			}
+			if isNewVersion {
+				fmt.Printf("%s was updated to version %s\n", j.executable, newVersion)
+			} else {
+				fmt.Printf("JKL is already at the most current version (%s).\n", Version)
+			}
+			return nil
+		},
+	}
+	rootCmd.AddCommand(updateSelfCmd)
 
 	cobra.CheckErr(rootCmd.Execute())
 	return nil

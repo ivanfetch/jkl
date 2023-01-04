@@ -6,10 +6,10 @@ import (
 	"syscall"
 )
 
-// RunCommand execs the specified command, the command will replace the
+// ExecCommand exec()s the specified command, the command will replace the
 // current (Go program) process. If commandAndArgs[0] is not an absolute path,
 // the PATH environment variable will be searched for the executable.
-func RunCommand(commandAndArgs []string) error {
+func ExecCommand(commandAndArgs []string) error {
 	cmd, err := exec.LookPath(commandAndArgs[0])
 	if err != nil {
 		return err

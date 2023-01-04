@@ -32,7 +32,7 @@ func TestExecHelper(t *testing.T) {
 		return
 	}
 	commandString := os.Getenv("test_exec_helper_command")
-	err := jkl.RunCommand(strings.Split(commandString, " "))
+	err := jkl.ExecCommand(strings.Split(commandString, " "))
 	if err != nil {
 		t.Fatal(err)
 	}

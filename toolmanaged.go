@@ -55,7 +55,7 @@ func (t managedTool) Run(args []string) error {
 	if !ok {
 		return fmt.Errorf("version %s of %s is not installed by %[3]s, please see the `%[3]s install` command to install it", desiredVersion, t.name, callMeProgName)
 	}
-	err = RunCommand(append([]string{installedCommandPath}, args...))
+	err = ExecCommand(append([]string{installedCommandPath}, args...))
 	if err != nil {
 		return err
 	}

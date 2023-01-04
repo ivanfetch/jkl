@@ -1,0 +1,10 @@
+exec jkl version
+stdout 'jkl version'
+stdout 'git commit '
+# Update the TestScript-facilitated jkl to the latest released version.
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+exec jkl update
+stdout 'jkl was updated to version'
+! stderr .

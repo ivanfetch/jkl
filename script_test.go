@@ -5,12 +5,18 @@ package jkl_test
 // Note: The go test -testwork flag preserves the TestScript temporary directory.
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/ivanfetch/jkl"
 	"github.com/rogpeppe/go-internal/testscript"
 )
+
+var testScriptSetup func(*testscript.Env) error = func(e *testscript.Env) error {
+	e.Vars = append(e.Vars, fmt.Sprintf("GH_TOKEN=%s", os.Getenv("GH_TOKEN")))
+	return nil
+}
 
 func TestMain(m *testing.M) {
 	// Map binary names called by TestScript scripts, to run jkl.
@@ -27,6 +33,19 @@ func TestMain(m *testing.M) {
 }
 func TestScript(t *testing.T) {
 	testscript.Run(t, testscript.Params{
-		Dir: "testdata/script",
+		Dir:   "testdata/script",
+		Setup: testScriptSetup,
+	})
+}
+
+// TestUpdateSelf tests updating the jkl binary to the latest available
+// release from Github.
+// This test canot run in parallel with other TestScript tests, because it
+// messes with the jkl binary while other tests are using the
+// TestScript-managed symlink.
+func TestScriptUpdateSelf(t *testing.T) {
+	testscript.Run(t, testscript.Params{
+		Dir:   "testdata/update-self",
+		Setup: testScriptSetup,
 	})
 }
