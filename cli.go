@@ -43,15 +43,27 @@ func RunCLI(args []string, output, errOutput io.Writer) error {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true // Until completion behavior is tested
 	rootCmd.PersistentFlags().BoolVarP(&debugFlagEnabled, "debug", "D", false, "Enable debug output (also enabled by setting the JKL_DEBUG environment variable to any value).")
 
+	var versionOnly, commitOnly bool
 	var versionCmd = &cobra.Command{
 		Use:     "version",
 		Short:   "Display the jkl version and git commit",
 		Long:    "Display the jkl version and git commit",
 		Aliases: []string{"ver", "v"},
 		Run: func(cmd *cobra.Command, args []string) {
+			if versionOnly {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", Version)
+				return
+			}
+			if commitOnly {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", GitCommit)
+				return
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s version %s, git commit %s\n", callMeProgName, Version, GitCommit)
 		},
 	}
+	versionCmd.Flags().BoolVarP(&versionOnly, "version-only", "v", false, "Only output the jkl version.")
+	versionCmd.Flags().BoolVarP(&commitOnly, "commit-only", "c", false, "Only output the jkl git commit.")
+	versionCmd.MarkFlagsMutuallyExclusive("version-only", "commit-only")
 	rootCmd.AddCommand(versionCmd)
 
 	var installCmd = &cobra.Command{
