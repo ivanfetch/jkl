@@ -9,6 +9,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Main is an exported function that calls the same entrypoint as the jkl
+// binary. This is used by tests, to run jkl. See script_test.go.
+func Main() (exitCode int) {
+	err := RunCLI(os.Args, os.Stdout, os.Stderr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
 // RunCLI determines how this binary was run, and either calls RunShim() or
 // processes JKL commands and arguments.
 func RunCLI(args []string, output, errOutput io.Writer) error {

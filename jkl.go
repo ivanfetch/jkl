@@ -233,7 +233,7 @@ func (j JKL) createShim(binaryName string) error {
 		return err
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		debugLog.Printf("creating directory %q", j.shimsDir)
+		debugLog.Printf("creating shims directory %q", j.shimsDir)
 		err := os.MkdirAll(j.shimsDir, 0700)
 		if err != nil {
 			return err
@@ -252,6 +252,7 @@ func (j JKL) createShim(binaryName string) error {
 		}
 		return nil
 	}
+	// The shim did not need to be created, verify it is correct.
 	if shimStat.Mode()&fs.ModeSymlink == 0 {
 		return fmt.Errorf("not overwriting existing incorrect shim %s which should be a symlink (%v), but is instead mode %v", shimPath, fs.ModeSymlink, shimStat.Mode())
 	}
@@ -259,11 +260,19 @@ func (j JKL) createShim(binaryName string) error {
 	if err != nil {
 		return fmt.Errorf("while dereferencing shim symlink %s: %v", shimPath, err)
 	}
-	if shimDest == j.executable {
+	shimDestStat, err := os.Stat(shimDest)
+	if err != nil {
+		return err
+	}
+	executableStat, err := os.Stat(j.executable)
+	if err != nil {
+		return err
+	}
+	if os.SameFile(shimDestStat, executableStat) {
 		debugLog.Printf("shim for %s already exists", shimPath)
 		return nil
 	}
-	return fmt.Errorf("shim %s already exists but points to %q", shimPath, shimDest)
+	return fmt.Errorf("shim %s already exists but points to %q instead of %q", shimPath, shimDest, j.executable)
 }
 
 func (j JKL) displayInstalledTools(output io.Writer) error {

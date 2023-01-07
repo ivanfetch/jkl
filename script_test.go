@@ -2,7 +2,7 @@
 
 package jkl_test
 
-// Note: Use go test -testwork to preserve the TestScript temporary directory.
+// Note: The go test -testwork flag preserves the TestScript temporary directory.
 
 import (
 	"os"
@@ -12,14 +12,19 @@ import (
 	"github.com/rogpeppe/go-internal/testscript"
 )
 
-func init() {
-	// Enable debugging for all tests, via the same environment variable the jkl
-	// binary uses.
-	if os.Getenv("JKL_DEBUG") != "" {
-		jkl.EnableDebugOutput()
-	}
+func TestMain(m *testing.M) {
+	// Map binary names called by TestScript scripts, to run jkl.
+	// This causes TestScript to symlink these binary names, affectively doing the
+	// work of jkl.createShim()
+	os.Exit(testscript.RunMain(m, map[string]func() int{
+		"jkl": jkl.Main,
+		// List tools that jkl will install in testdata/script/* tests.
+		"gh":        jkl.Main,
+		"kind":      jkl.Main,
+		"prme":      jkl.Main,
+		"terraform": jkl.Main,
+	}))
 }
-
 func TestScript(t *testing.T) {
 	testscript.Run(t, testscript.Params{
 		Dir: "testdata/script",
