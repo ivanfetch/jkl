@@ -25,10 +25,16 @@ func TestMain(m *testing.M) {
 	os.Exit(testscript.RunMain(m, map[string]func() int{
 		"jkl": jkl.Main,
 		// List tools that jkl will install in testdata/script/* tests.
+		// Using `exec toolname` in a .txtar file that is not listed here, will
+		// return a TestScript error like:
+		//                 testscript.go:224: no txtar nor txt scripts found in dir testdata/script
 		"gh":        jkl.Main,
+		"helm":      jkl.Main,
+		"jq":        jkl.Main,
 		"kind":      jkl.Main,
 		"prme":      jkl.Main,
 		"terraform": jkl.Main,
+		"vault":     jkl.Main,
 	}))
 }
 func TestScript(t *testing.T) {

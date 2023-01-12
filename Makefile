@@ -18,11 +18,11 @@ go.sum:go.mod
 
 .PHONY: test
 test:go.sum
-	go test ./...
+	go test -coverprofile=cover.out
 
 .PHONY: integrationtest
 integrationtest:go.sum
-	go test -tags integration ./...
+	go test -tags integration -coverprofile=cover.out
 
 .PHONY: binary
 binary:go.sum

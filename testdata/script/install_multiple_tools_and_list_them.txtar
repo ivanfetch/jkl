@@ -1,0 +1,28 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+exec jkl install hashi:vault
+! stdout .
+! stderr .
+exec vault version
+stdout 'Vault v\d+\.\d+\.\d'
+! stderr .
+exec jkl install gh:stedolan/jq
+! stdout .
+! stderr .
+exec jq -V
+stdout 'jq-\d+\.\d+'
+! stderr .
+exec jkl install github:helm/helm
+! stdout .
+! stderr .
+exec helm version
+stdout 'version.BuildInfo{Version:"v\d+\.\d+'
+! stderr .
+exec jkl list
+cmp stdout list.txt
+! stderr .
+-- list.txt --
+helm
+jq
+vault

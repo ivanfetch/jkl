@@ -245,8 +245,8 @@ func (j JKL) createShim(binaryName string) error {
 		return fmt.Errorf("while looking for existing shim %s: %v", shimPath, err)
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		debugLog.Printf("Creating shim %s -> %s\n", binaryName, j.executable)
-		err = os.Symlink(j.executable, shimPath)
+		debugLog.Printf("Creating shim %s -> %s\n", binaryName, j.GetExecutable())
+		err = os.Symlink(j.GetExecutable(), shimPath)
 		if err != nil {
 			return err
 		}
@@ -264,7 +264,7 @@ func (j JKL) createShim(binaryName string) error {
 	if err != nil {
 		return err
 	}
-	executableStat, err := os.Stat(j.executable)
+	executableStat, err := os.Stat(j.GetExecutable())
 	if err != nil {
 		return err
 	}
@@ -272,7 +272,7 @@ func (j JKL) createShim(binaryName string) error {
 		debugLog.Printf("shim for %s already exists", shimPath)
 		return nil
 	}
-	return fmt.Errorf("shim %s already exists but points to %q instead of %q", shimPath, shimDest, j.executable)
+	return fmt.Errorf("shim %s already exists but points to %q instead of %q", shimPath, shimDest, j.GetExecutable())
 }
 
 func (j JKL) displayInstalledTools(output io.Writer) error {

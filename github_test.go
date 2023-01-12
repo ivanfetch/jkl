@@ -3,6 +3,7 @@ package jkl_test
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/ivanfetch/jkl"
 )
 
@@ -137,5 +138,52 @@ func TestGithubAssetNameWithoutVersionAndComponents(t *testing.T) {
 				t.Errorf("want base name %q, got %q for asset %q", tc.want, got, tc.asset.Name)
 			}
 		})
+	}
+}
+
+func TestMatchAssetByOsAndArch(t *testing.T) {
+	t.Parallel()
+
+	testAssets := []jkl.GithubAsset{
+		{
+			Name: "checksums.txt",
+			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905347",
+		},
+		{
+			Name: "prme_0.0.6_Darwin_x86_64.tar.gz",
+			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905345",
+		},
+		{
+			Name: "prme_0.0.6_Linux_arm64.tar.gz",
+			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905348",
+		},
+		{
+			Name: "prme_0.0.6_Linux_x86_64.tar.gz",
+			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905353",
+		},
+		{
+			Name: "prme_0.0.6_Windows_x86_64.tar.gz",
+			URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905349",
+		},
+	}
+
+	gotAsset, gotOS, gotArch, ok := jkl.MatchAssetByOsAndArch(testAssets, "darwin", "amd64")
+	wantAsset := jkl.GithubAsset{
+		Name: "prme_0.0.6_Darwin_x86_64.tar.gz",
+		URL:  "https://api.github.com/repos/ivanfetch/PRMe/releases/assets/47905345",
+	}
+	if !ok {
+		t.Fatal("no asset matched")
+	}
+	if !cmp.Equal(wantAsset, gotAsset) {
+		t.Fatalf("want vs. got: %s", cmp.Diff(wantAsset, gotAsset))
+	}
+	wantOS := "darwin"
+	if wantOS != gotOS {
+		t.Fatalf("want OS %s, got %s", wantOS, gotOS)
+	}
+	wantArch := "x86_64"
+	if wantArch != gotArch {
+		t.Fatalf("want architecture %s, got %s", wantArch, gotArch)
 	}
 }

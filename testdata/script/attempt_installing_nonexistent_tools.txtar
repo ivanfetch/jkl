@@ -1,0 +1,10 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+! exec jkl install github:ivanfetch/nonexistanttool
+! stdout .
+stderr 'no such repository'
+! exec jkl install github:prme:NotAValidVersionNumber
+! stdout .
+stderr 'the repository must be of the form OwnerName/RepositoryName'
+
