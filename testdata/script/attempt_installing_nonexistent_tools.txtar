@@ -1,10 +1,15 @@
 mkdir $WORK/home/testuser
 env HOME=$WORK/home/testuser
 env PATH=$HOME/.jkl/bin:$PATH
-! exec jkl install github:ivanfetch/nonexistanttool
+! exec jkl install github:ivanfetch/nonexistenttool
 ! stdout .
 stderr 'no such repository'
 ! exec jkl install github:prme:NotAValidVersionNumber
 ! stdout .
 stderr 'the repository must be of the form OwnerName/RepositoryName'
-
+! exec jkl install hashicorp:nonexistenttool
+! stdout .
+stderr 'no such Hashicorp product'
+! exec jkl install hashicorp:terraform:0.0.0
+! stdout .
+stderr 'no version found to match "0.0.0"'

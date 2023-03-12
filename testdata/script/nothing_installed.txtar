@@ -1,8 +1,9 @@
 mkdir $WORK/home/testuser
 env HOME=$WORK/home/testuser
 env PATH=$HOME/.jkl/bin:$PATH
-exec jkl install github:kubernetes-sigs/kind:0.14.0
+exec jkl
+stdout 'jkl is not yet managing any tools'
+! stderr .
+exec jkl list
 ! stdout .
 ! stderr .
-exec kind version
-stdout 'kind v0.14.0'

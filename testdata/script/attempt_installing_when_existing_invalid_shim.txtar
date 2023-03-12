@@ -1,0 +1,13 @@
+mkdir $WORK/home/testuser
+mkdir $WORK/home/testuser/.jkl
+mkdir $WORK/home/testuser/.jkl/bin
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+symlink $HOME/.jkl/bin/prme -> $WORK/fake_alternate_copy_of_jkl
+! exec jkl install github:ivanfetch/prme
+! stdout .
+stderr 'exists but points to'
+
+-- fake_alternate_copy_of_jkl --
+this is pretending to be another alternate copy of jkl
+

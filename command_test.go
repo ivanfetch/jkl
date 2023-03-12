@@ -74,3 +74,13 @@ func TestFindCommandVersion(t *testing.T) {
 		t.Fatalf("want %q, got %q", want, got)
 	}
 }
+
+func TestFindCommandVersionWhenCommandDoesNotExist(t *testing.T) {
+	got, err := jkl.FindCommandVersion("command_that_does_not_exist", "1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("expected an empty string, got %q", got)
+	}
+}

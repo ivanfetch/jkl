@@ -208,7 +208,9 @@ func directoryInPath(dirName string) (bool, error) {
 
 func getAliasesForArchitecture(arch string) []string {
 	archAliases := map[string][]string{
-		"amd64": {"x86_64"},
+		// The `universal` alias should always be last in the list, this supports macOS
+		// binaries for amd64 and arm64.
+		"amd64": {"x86_64", "64bit", "64-bit", "universal"},
 	}
 	return archAliases[strings.ToLower(arch)]
 }

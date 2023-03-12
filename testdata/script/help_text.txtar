@@ -1,0 +1,20 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+exec jkl --help
+stdout 'a version manager for other command-line tools'
+! stderr .
+exec jkl install --help
+stdout 'github'
+stdout 'hashicorp'
+! stderr .
+exec jkl uninstall --help
+stdout 'tool version must be exact'
+! stderr .
+exec jkl update --help
+stdout 'retaining its current file mode'
+! stderr .
+exec jkl list --help
+stdout 'With no arguments, all tools that jkl has installed are shown. With a tool name, jkl lists installed versions of that tool.'
+! stderr .
+

@@ -225,7 +225,7 @@ func (g *GithubRepo) githubAPIRequest(method, URI string) (*http.Response, error
 	if !strings.HasPrefix(URI, "/") {
 		URI = "/" + URI
 	}
-	URL := g.client.apiHost + URI
+	URL := g.client.apiHost + URI + "?per_page=100"
 	req, err := http.NewRequest(method, URL, nil)
 	if err != nil {
 		return nil, err

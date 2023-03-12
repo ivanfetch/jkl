@@ -13,8 +13,9 @@ exec jkl install hashi:terraform:1.0.2
 env JKL_TERRAFORM=1.0.2
 exec terraform version
 stdout 'Terraform v1.0.2'
-# This version requires jkl to fetch jultiple pages of Hashicorp releases
-exec jkl install hashicorp:terraform:0.11.15
+# This version requires jkl to fetch jultiple pages of Hashicorp releases,
+# and also find the latest patch-release.
+exec jkl install hashicorp:terraform:0.11
 ! stdout .
 ! stderr .
 env JKL_TERRAFORM=0.11.15

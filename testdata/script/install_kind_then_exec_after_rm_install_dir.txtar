@@ -1,0 +1,12 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+exec jkl install github:kubernetes-sigs/kind:0.14.0
+! stdout .
+! stderr .
+exec kind version
+stdout 'kind v0.14.0'
+rm $HOME/.jkl/installs/kind
+! exec kind version
+! stdout .
+stderr '.jkl/installs/kind/.: no such file or directory'
