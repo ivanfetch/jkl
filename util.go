@@ -127,61 +127,35 @@ func CopyExecutableToCreatedDir(sourceFilePath, destFilePath string) error {
 	return nil
 }
 
-// pathOption is the functional options pattern for listPathsByParent.
-type pathOption func(*string)
-
-// WithAlternateRootDir sets a root directory other than "/", to instruct
-// listPathsByParent() when to stop searching parent directories.
-// listPathsByParent.
-func WithAlternateRootDir(r string) pathOption {
-	return func(d *string) {
-		*d = r
-	}
-}
-
 // listPathsByParent returns directories where the specified file name is
-// found, starting in the current working directory and traversing parent
-// directories until the root (/ or a specified alternative) is reached.
-func listPathsByParent(fileName string, options ...pathOption) (paths []string, err error) {
-	debugLog.Printf("Starting to list paths for %q by parent", fileName)
-	var rootPath *string
-	defaultRootPath := "/"
-	rootPath = &defaultRootPath
-	for _, option := range options {
-		option(rootPath)
+// found, starting in the specified startDirName and traversing parent
+// directories, stopping after processing rootDirName.
+func listPathsByParent(fileName, startDirName, rootDirName string) (paths []string, err error) {
+	if startDirName == "" {
+		return nil, fmt.Errorf("startDirName cannot be empty")
 	}
-	// Evaluating symlinks allows comparing to os.GetCWD() which dereferences links
-	*rootPath, _ = filepath.EvalSymlinks(*rootPath)
-	oldCWD, err := os.Getwd()
-	if err != nil {
-		return nil, err
+	if rootDirName == "" {
+		return nil, fmt.Errorf("rootDirName cannot be empty")
 	}
-	defer func() {
-		dErr := os.Chdir(oldCWD)
-		if dErr != nil { // avoid setting upstream err to nil
-			err = dErr
-		}
-	}()
+	debugLog.Printf("Starting to list paths where %q is found from %q to %q, by parent", fileName, startDirName, rootDirName)
+	// Evaluating symlinks allows comparing to os.GetWD() which dereferences links
+	// The startDirName or rootDirName parameters may have been supplied via GetWD().
+	startDirName, _ = filepath.EvalSymlinks(startDirName)
+	rootDirName, _ = filepath.EvalSymlinks(rootDirName)
+	var checkDir string = startDirName
 	for {
-		CWD, err := os.Getwd()
-		if err != nil {
-			return nil, err
-		}
-		_, err = os.Stat(fileName)
+		_, err = os.Stat(filepath.Join(checkDir, fileName))
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
 		if err == nil {
-			paths = append(paths, CWD)
+			paths = append(paths, checkDir)
 		}
-		if CWD == *rootPath {
-			debugLog.Printf("Done listing paths for %q by parent, reached specified root %q", fileName, *rootPath)
+		if checkDir == rootDirName {
+			debugLog.Printf("Done listing paths for %q by parent, reached specified root %q", fileName, rootDirName)
 			break
 		}
-		err = os.Chdir("..")
-		if err != nil {
-			return nil, err
-		}
+		checkDir = filepath.Clean(filepath.Join(checkDir, ".."))
 	}
 	debugLog.Printf("File %s was found in these paths: %v\n", fileName, paths)
 	return paths, nil

@@ -94,7 +94,9 @@ func TestGithubMatchTagFromPartialVersion(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc // Capture range variable
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
 			gotTag, gotMatch := fakeGithubReleases.MatchTagFromPartialVersion(tc.version)
 			if tc.expectMatch && !gotMatch {
 				t.Fatal("expected version to match a tag, try running tests with the JKL_DEBUG environment variable set for more information")
@@ -132,7 +134,9 @@ func TestGithubAssetNameWithoutVersionAndComponents(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc // Capture range variable
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
 			got := tc.asset.NameWithoutVersionAndComponents(tc.removeComponents...)
 			if tc.want != got {
 				t.Errorf("want base name %q, got %q for asset %q", tc.want, got, tc.asset.Name)

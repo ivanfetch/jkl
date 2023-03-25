@@ -13,10 +13,7 @@ import (
 )
 
 func TestExtractFile(t *testing.T) {
-	// These are non-parallel tests because they change the current working
-	// directory.
-	// Eventually code will use all absolute filesystem locations and these
-	// tests can be parallelized.
+	t.Parallel()
 	testCases := []struct {
 		description     string
 		archiveFilePath string
@@ -93,7 +90,9 @@ func TestExtractFile(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc // Capture range variable
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
 			tempDir := t.TempDir()
 			err := jkl.CopyFile("testdata/archives/"+tc.archiveFilePath, tempDir)
 			if err != nil {

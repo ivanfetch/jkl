@@ -12,8 +12,7 @@ import (
 )
 
 func TestFindASDFToolVersion(t *testing.T) {
-	// These are non-parallel tests because they change the current working
-	// directory.
+	t.Parallel()
 	testCases := []struct {
 		description             string
 		testCWD                 string // within test tempDir
@@ -68,19 +67,11 @@ func TestFindASDFToolVersion(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc // Capture range variable
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
 			tempDir := t.TempDir()
 			testDir := tempDir + "/" + tc.testCWD
-			oldCWD, err := os.Getwd()
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() {
-				dErr := os.Chdir(oldCWD)
-				if dErr != nil {
-					err = dErr
-				}
-			}()
 			for subDir, fileContent := range tc.toolVersionFilesContent {
 				fileName := fmt.Sprintf("%s/%s/.tool-versions", tempDir, subDir)
 				err := writeDirsAndFile(fileName, fileContent)
@@ -88,11 +79,13 @@ func TestFindASDFToolVersion(t *testing.T) {
 					t.Fatalf("writing test tool-versions file %s: %v", fileName, err)
 				}
 			}
-			err = os.Chdir(testDir)
-			if err != nil {
-				t.Fatalf("unable to change to test-case directory %q: %v", testDir, err)
-			}
-			gotToolVersion, gotOK, err := jkl.FindASDFToolVersion(tc.toolName, jkl.WithAlternateRootDir(tempDir))
+			/*
+				err = os.Chdir(testDir)
+				if err != nil {
+					t.Fatalf("unable to change to test-case directory %q: %v", testDir, err)
+				}
+			*/
+			gotToolVersion, gotOK, err := jkl.FindASDFToolVersion(tc.toolName, jkl.WithASDFConfigSearchStartDir(testDir), jkl.WithASDFConfigSearchRootDir(tempDir))
 			if err != nil && !tc.expectError {
 				t.Fatal(err)
 			}

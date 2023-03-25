@@ -10,10 +10,53 @@ const (
 	ASDFConfigFileName = ".tool-versions"
 )
 
+// asdfConfigSearchParameters holds the start and end directory
+// boundaries to use when searching for an ASDF configuration file.
+type asdfConfigSearchParameters struct {
+	startDir string // Name of the directory to begin searching for an ASDF config file
+	rootDir  string // Where to stop traversing parent directories while searching for an ASDF config file
+}
+
+// asdfConfigSearchOption is the functional options pattern for
+// asdfConfigSearchParameters
+type asdfConfigSearchOption func(*asdfConfigSearchParameters)
+
+// WithASDFConfigSearchStartDir sets a root directory where
+// FindASDFToolVersion() should start searching for an ASDF configuration file.
+func WithASDFConfigSearchStartDir(s string) asdfConfigSearchOption {
+	return func(p *asdfConfigSearchParameters) {
+		p.startDir = s
+	}
+}
+
+// WithASDFConfigSearchRootDir sets a root directory where
+// FindASDFToolVersion() should stop searching for an ASDF configuration file.
+func WithASDFConfigSearchRootDir(r string) asdfConfigSearchOption {
+	return func(p *asdfConfigSearchParameters) {
+		p.rootDir = r
+	}
+}
+
 // findASDFToolVersion traverses parent directories to find the desired
 // version for the specified tool, in the ASDF configuration file.
-func FindASDFToolVersion(toolName string, locationOptions ...pathOption) (toolVersion string, foundTool bool, err error) {
-	locations, err := listPathsByParent(ASDFConfigFileName, locationOptions...)
+// The WithASDFConfigSearch* functions can be used to specify th start and
+// stop (root) directory where config files should be consulted.
+func FindASDFToolVersion(toolName string, asdfConfigSearchOptions ...asdfConfigSearchOption) (toolVersion string, foundTool bool, err error) {
+	searchParams := &asdfConfigSearchParameters{}
+	for _, option := range asdfConfigSearchOptions {
+		option(searchParams)
+	}
+	if searchParams.startDir == "" {
+		currentDir, err := os.Getwd()
+		if err != nil {
+			return "", false, err
+		}
+		searchParams.startDir = currentDir
+	}
+	if searchParams.rootDir == "" {
+		searchParams.rootDir = "/"
+	}
+	locations, err := listPathsByParent(ASDFConfigFileName, searchParams.startDir, searchParams.rootDir)
 	if err != nil {
 		return "", false, err
 	}
