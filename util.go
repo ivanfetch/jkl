@@ -13,14 +13,18 @@ import (
 	hashicorpversion "github.com/hashicorp/go-version"
 )
 
-// stringContainsOneOfLowerCase reports the first substring contained in s, returning
+// stringContainsOneOf reports the first substring contained in s, returning
 // true if a match is found, and the original substring that matched.
 // Substrings are matched using lower-case.
-func stringContainsOneOfLowerCase(s, firstSubstr string, additionalSubstrs ...string) (match string, found bool) {
+func stringContainsOneOf(s, firstSubstr string, additionalSubstrs ...string) (match string, found bool) {
 	allSubStrings := append([]string{firstSubstr}, additionalSubstrs...)
+	LCS := strings.ToLower(s)
 	for i := len(allSubStrings) - 1; i >= 0; i-- {
-		if strings.Contains(strings.ToLower(s), strings.ToLower(allSubStrings[i])) {
-			return allSubStrings[i], true
+		matchedIndex := strings.Index(LCS, strings.ToLower(allSubStrings[i]))
+		if matchedIndex > -1 {
+			matchedStr := s[matchedIndex : matchedIndex+len(allSubStrings[i])]
+			debugLog.Printf("matched substring %s at index %d in %s", matchedStr, matchedIndex, s)
+			return matchedStr, true
 		}
 	}
 	return "", false

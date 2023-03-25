@@ -178,7 +178,7 @@ func TestMatchAssetByOsAndArch(t *testing.T) {
 	if !cmp.Equal(wantAsset, gotAsset) {
 		t.Fatalf("want vs. got: %s", cmp.Diff(wantAsset, gotAsset))
 	}
-	wantOS := "darwin"
+	wantOS := "Darwin"
 	if wantOS != gotOS {
 		t.Fatalf("want OS %s, got %s", wantOS, gotOS)
 	}

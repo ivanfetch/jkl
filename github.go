@@ -480,8 +480,8 @@ func (g GithubRepo) DownloadExternalAsset(URL string) (filePath string, err erro
 
 func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (matchedAsset GithubAsset, matchedOS, matchedArch string, successfulMatch bool) {
 	for _, asset := range assets {
-		matchedOS, foundOS := stringContainsOneOfLowerCase(asset.Name, OS, getAliasesForOperatingSystem(OS)...)
-		matchedArch, foundArch := stringContainsOneOfLowerCase(asset.Name, arch, getAliasesForArchitecture(arch)...)
+		matchedOS, foundOS := stringContainsOneOf(asset.Name, OS, getAliasesForOperatingSystem(OS)...)
+		matchedArch, foundArch := stringContainsOneOf(asset.Name, arch, getAliasesForArchitecture(arch)...)
 		if foundOS && foundArch {
 			debugLog.Printf("matched this asset for OS %q and arch %q: %#v", OS, arch, asset)
 			return asset, matchedOS, matchedArch, true

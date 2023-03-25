@@ -1,0 +1,8 @@
+mkdir $WORK/home/testuser
+env HOME=$WORK/home/testuser
+env PATH=$HOME/.jkl/bin:$PATH
+# This asset has a capitalized OS, which fails to install if a lowercase OS
+# string is attempted to be removed from the asset name.
+exec jkl install github:genkiroid/cert
+! stdout .
+! stderr .
