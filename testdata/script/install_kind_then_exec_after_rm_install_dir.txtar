@@ -9,4 +9,4 @@ stdout 'kind v0.14.0'
 rm $HOME/.jkl/installs/kind
 ! exec kind version
 ! stdout .
-stderr '.jkl/installs/kind/.: no such file or directory'
+stderr 'no versions of kind are installed'

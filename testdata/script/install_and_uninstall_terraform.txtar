@@ -36,8 +36,8 @@ stdout 1.0.2
 exec jkl uninstall terraform
 ! stdout .
 ! stderr .
-! exec jkl list terraform
-! stdout .
-stderr 'no such file or directory'
+exec jkl list terraform
+stdout 'terraform is not installed'
+! stderr .
 # The shim should have also ben removed
 ! exists $HOME/.jkl/bin/terraform

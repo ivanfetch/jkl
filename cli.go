@@ -204,7 +204,7 @@ func (j JKL) RunShim(args []string) error {
 	tool := j.getManagedTool(calledProgName)
 	err := tool.Run(args[1:])
 	if err != nil {
-		return err
+		return fmt.Errorf("jkl: %v", err)
 	}
 	return nil
 }

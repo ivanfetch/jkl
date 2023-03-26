@@ -40,20 +40,21 @@ func (t managedTool) Run(args []string) error {
 		if err != nil {
 			return err
 		}
-		if foundAnyVersions && len(availableVersions) > 1 {
+		if !foundAnyVersions {
+			return fmt.Errorf("no versions of %s are installed, please see the `%s install` command to install it", t.name, callMeProgName)
+		}
+		if len(availableVersions) > 1 {
 			return fmt.Errorf(`please specify which version of %s you would like to run, by setting the %s environment variable to a valid version, or to "latest" to use the latest installed version.`, t.name, t.envVarName())
 		}
-		if foundAnyVersions {
-			desiredVersion = availableVersions[0]
-			debugLog.Printf("selecting the only available version %s for tool %s", desiredVersion, t.name)
-		}
+		desiredVersion = availableVersions[0]
+		debugLog.Printf("selecting the only available version %s for tool %s", desiredVersion, t.name)
 	}
 	installedCommandPath, ok, err := t.path(desiredVersion)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("version %s of %s is not installed by %[3]s, please see the `%[3]s install` command to install it", desiredVersion, t.name, callMeProgName)
+		return fmt.Errorf("version %s of %s is not installed please see the `%s install` command to install it", desiredVersion, t.name, callMeProgName)
 	}
 	err = ExecCommand(append([]string{installedCommandPath}, args...))
 	if err != nil {
@@ -145,7 +146,13 @@ func (t managedTool) envVarName() string {
 // listInstalledVersions returns a sorted list of installed versions for
 // the specified tool. The newest version will be last in the slice.
 func (t managedTool) listInstalledVersions() (versions []string, found bool, err error) {
-	fileSystem := os.DirFS(filepath.Join(t.jkl.installsDir, t.name))
+	toolDir := filepath.Join(t.jkl.installsDir, t.name)
+	_, err = os.Stat(toolDir)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		debugLog.Printf("there are no installed versions for %s, %s does not exist", t.name, toolDir)
+		return nil, false, nil
+	}
+	fileSystem := os.DirFS(toolDir)
 	versions = make([]string, 0)
 	err = fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
