@@ -60,7 +60,7 @@ func WithHTTPClient(hc *http.Client) githubClientOption {
 func NewGithubClient(options ...githubClientOption) (*GithubClient, error) {
 	c := &GithubClient{
 		apiHost:    "https://api.github.com",
-		token:      os.Getenv("GH_TOKEN"),
+		token:      os.Getenv("GITHUB_TOKEN"),
 		httpClient: &defaultHTTPClient,
 	}
 	for _, o := range options {
