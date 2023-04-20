@@ -7,12 +7,13 @@ import (
 
 // ToolSpec holds information about a tool for a provider to download.
 type ToolSpec struct {
-	name           string
-	version        string
-	provider       string // E.G. github, hashicorp
-	source         string // E.G. Github owner/repo, Hashicorp product
-	downloadPath   string
-	verifyDownload bool // VErify the DL checksum, if supported by the provider.
+	name                     string
+	version                  string
+	provider                 string // E.G. github, hashicorp
+	source                   string // E.G. Github owner/repo, Hashicorp product
+	downloadPath             string
+	expectedDownloadChecksum string
+	verifyDownload           bool // VErify the DL checksum, if supported by the provider.
 }
 
 // NewToolSpec accepts a tool specification of the form provider:source:[version]

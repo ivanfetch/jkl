@@ -76,9 +76,10 @@ func NewHashicorpClient(options ...hashicorpClientOption) (*HashicorpClient, err
 }
 
 type hashicorpBuild struct {
-	Arch string `json:"arch"`
-	OS   string `json:"os"`
-	URL  string `json:"url"`
+	Arch       string `json:"arch"`
+	OS         string `json:"os"`
+	URL        string `json:"url"`
+	URLShaSums string `json:"url_shasums"`
 }
 
 type hashicorpRelease struct {
@@ -125,6 +126,7 @@ type HashicorpProduct struct {
 	name                       string
 	oldestSeenReleaseTimestamp string // pagination marker
 	client                     *HashicorpClient
+	verifyDownload             bool
 }
 
 func NewHashicorpProduct(name string, clientOptions ...hashicorpClientOption) (*HashicorpProduct, error) {
@@ -159,6 +161,32 @@ func (h *HashicorpProduct) hashicorpAPIRequest(method, URI string) (*http.Respon
 		return nil, err
 	}
 	return resp, nil
+}
+
+func (h HashicorpProduct) downloadFile(URL, destFilePath string) error {
+	debugLog.Printf("downloading hashicorp URL %q to %q", URL, destFilePath)
+	req, err := http.NewRequest(http.MethodGet, URL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Accept", "application/octet-stream")
+	resp, err := h.client.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, URL)
+	}
+	f, err := os.Create(destFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h HashicorpProduct) Exists() (bool, error) {
@@ -291,32 +319,21 @@ func (h HashicorpProduct) releaseForPartialVersion(version string) (release hash
 	return hashicorpRelease{}, false, nil
 }
 
-func (h HashicorpProduct) Download(build hashicorpBuild) (filePath string, err error) {
+func (h HashicorpProduct) DownloadBuildAndChecksums(build hashicorpBuild) (filePath string, err error) {
 	debugLog.Printf("downloading Hashicorp build from %s", build.URL)
-	req, err := http.NewRequest(http.MethodGet, build.URL, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Add("Accept", "application/octet-stream")
-	resp, err := h.client.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, build.URL)
-	}
 	tempDir, err := os.MkdirTemp(os.TempDir(), callMeProgName+"-")
 	if err != nil {
 		return "", err
 	}
 	filePath = fmt.Sprintf("%s/%s", tempDir, filepath.Base(build.URL))
-	f, err := os.Create(filePath)
+	err = h.downloadFile(build.URL, filePath)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	debugLog.Printf("downloading Hashicorp build checksums file from %s", build.URLShaSums)
+	checksumsFilePath := fmt.Sprintf("%s/%s", tempDir, filepath.Base(build.URLShaSums))
+	err = h.downloadFile(build.URL, checksumsFilePath)
+	if err != nil {
 		return "", err
 	}
 	return filePath, nil
@@ -340,7 +357,7 @@ func (h HashicorpProduct) DownloadReleaseForVersion(version string) (binaryPath,
 	if !ok {
 		return "", "", fmt.Errorf("no builds of %s version %s match OS %q and architecture %q", h.name, version, runtime.GOOS, runtime.GOARCH)
 	}
-	downloadedFile, err := h.Download(build)
+	downloadedFile, err := h.DownloadBuildAndChecksums(build)
 	if err != nil {
 		return "", "", err
 	}
