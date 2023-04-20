@@ -154,7 +154,7 @@ For additional help, run: %[1]s help
 // the tool provider and an optional version.
 func (j JKL) Install(specStr string) (installedVersion string, err error) {
 	debugLog.Printf("Installing tool specification %q\n", specStr)
-	toolSpec, err := j.NewToolSpec(specStr)
+	toolSpec, err := j.NewToolSpec(specStr, true) // Download validation is default-enabled without configurability for now.
 	if err != nil {
 		return "", err
 	}
