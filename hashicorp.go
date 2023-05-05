@@ -21,12 +21,19 @@ func HashicorpDownload(TS *ToolSpec) error {
 	if err != nil {
 		return err
 	}
-	downloadPath, downloadVersion, err := h.DownloadReleaseForVersion(TS.version)
+	downloadPath, matchedRelease, err := h.DownloadReleaseForVersion(TS.version)
 	if err != nil {
 		return err
 	}
+	if TS.verifyDownload {
+		checksumsFilePath, err := h.downloadChecksums(matchedRelease.URLShaSums)
+		if err != nil {
+			return err
+		}
+		TS.checksumFilePath = checksumsFilePath
+	}
 	TS.name = TS.source
-	TS.version = downloadVersion
+	TS.version = matchedRelease.Version
 	TS.downloadPath = downloadPath
 	return nil
 }
@@ -76,10 +83,9 @@ func NewHashicorpClient(options ...hashicorpClientOption) (*HashicorpClient, err
 }
 
 type hashicorpBuild struct {
-	Arch       string `json:"arch"`
-	OS         string `json:"os"`
-	URL        string `json:"url"`
-	URLShaSums string `json:"url_shasums"`
+	Arch string `json:"arch"`
+	OS   string `json:"os"`
+	URL  string `json:"url"`
 }
 
 type hashicorpRelease struct {
@@ -87,6 +93,7 @@ type hashicorpRelease struct {
 	Builds           []hashicorpBuild `json:"builds"`
 	TimestampCreated string           `json:"timestamp_created"` // needed for API pagination
 	IsPrerelease     bool             `json:"is_prerelease"`
+	URLShaSums       string           `json:"url_shasums"`
 }
 
 type hashicorpReleases []hashicorpRelease
@@ -138,8 +145,9 @@ func NewHashicorpProduct(name string, clientOptions ...hashicorpClientOption) (*
 		return nil, fmt.Errorf("while constructing Hashicorp client for product %s: %w", name, err)
 	}
 	return &HashicorpProduct{
-		name:   name,
-		client: c,
+		name:           name,
+		client:         c,
+		verifyDownload: true, // hard-coded for now
 	}, nil
 }
 
@@ -163,6 +171,9 @@ func (h *HashicorpProduct) hashicorpAPIRequest(method, URI string) (*http.Respon
 	return resp, nil
 }
 
+// downloadFile uses the HashicorpProduct.httpClient to download the specified
+// URL to the specified destFilePath. The base directory of destFilePath should
+// already exist.
 func (h HashicorpProduct) downloadFile(URL, destFilePath string) error {
 	debugLog.Printf("downloading hashicorp URL %q to %q", URL, destFilePath)
 	req, err := http.NewRequest(http.MethodGet, URL, nil)
@@ -319,24 +330,32 @@ func (h HashicorpProduct) releaseForPartialVersion(version string) (release hash
 	return hashicorpRelease{}, false, nil
 }
 
-func (h HashicorpProduct) DownloadBuildAndChecksums(build hashicorpBuild) (filePath string, err error) {
+func (h HashicorpProduct) DownloadBuildAndChecksums(build hashicorpBuild, checksumsURL string) (filePath string, err error) {
 	debugLog.Printf("downloading Hashicorp build from %s", build.URL)
 	tempDir, err := os.MkdirTemp(os.TempDir(), callMeProgName+"-")
 	if err != nil {
 		return "", err
 	}
-	filePath = fmt.Sprintf("%s/%s", tempDir, filepath.Base(build.URL))
+	filePath = filepath.Join(tempDir, filepath.Base(build.URL))
 	err = h.downloadFile(build.URL, filePath)
 	if err != nil {
 		return "", err
 	}
-	debugLog.Printf("downloading Hashicorp build checksums file from %s", build.URLShaSums)
-	checksumsFilePath := fmt.Sprintf("%s/%s", tempDir, filepath.Base(build.URLShaSums))
-	err = h.downloadFile(build.URL, checksumsFilePath)
+	return filePath, nil
+}
+
+func (h HashicorpProduct) downloadChecksums(checksumsURL string) (filePath string, err error) {
+	debugLog.Printf("downloading Hashicorp build checksums file from %s", checksumsURL)
+	tempDir, err := os.MkdirTemp(os.TempDir(), callMeProgName+"-")
 	if err != nil {
 		return "", err
 	}
-	return filePath, nil
+	checksumsFilePath := filepath.Join(tempDir, filepath.Base(checksumsURL))
+	err = h.downloadFile(checksumsURL, checksumsFilePath)
+	if err != nil {
+		return "", err
+	}
+	return checksumsFilePath, nil
 }
 
 // DownloadReleaseForVersion downloads the specified version of the Hashicorp
@@ -344,24 +363,24 @@ func (h HashicorpProduct) DownloadBuildAndChecksums(build hashicorpBuild) (fileP
 // was downloaded.
 // A version of `latest` or an empty string will download the latest
 // non-pre-release version.
-func (h HashicorpProduct) DownloadReleaseForVersion(version string) (binaryPath, matchedVersion string, err error) {
+func (h HashicorpProduct) DownloadReleaseForVersion(version string) (binaryPath string, matchedRelease hashicorpRelease, err error) {
 	release, ok, err := h.releaseForVersion(version)
 	if err != nil {
-		return "", "", err
+		return "", hashicorpRelease{}, err
 	}
 	if !ok {
-		return "", "", fmt.Errorf("no version found to match %q", version)
+		return "", hashicorpRelease{}, fmt.Errorf("no version found to match %q", version)
 	}
 	debugLog.Printf("downloading Hashicorp release for %s version %q\n", h.name, release.Version)
 	build, ok := MatchBuildByOsAndArch(release.Builds, runtime.GOOS, runtime.GOARCH)
 	if !ok {
-		return "", "", fmt.Errorf("no builds of %s version %s match OS %q and architecture %q", h.name, version, runtime.GOOS, runtime.GOARCH)
+		return "", hashicorpRelease{}, fmt.Errorf("no builds of %s version %s match OS %q and architecture %q", h.name, version, runtime.GOOS, runtime.GOARCH)
 	}
-	downloadedFile, err := h.DownloadBuildAndChecksums(build)
+	downloadedFile, err := h.DownloadBuildAndChecksums(build, release.URLShaSums)
 	if err != nil {
-		return "", "", err
+		return "", hashicorpRelease{}, err
 	}
-	return downloadedFile, release.Version, nil
+	return downloadedFile, release, nil
 }
 
 func MatchBuildByOsAndArch(builds []hashicorpBuild, OS, arch string) (hashicorpBuild, bool) {

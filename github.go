@@ -72,6 +72,36 @@ func NewGithubClient(options ...githubClientOption) (*GithubClient, error) {
 	return c, nil
 }
 
+// downloadFile uses the GithubClient httpClient to download the specified URL
+// to the specified destFilePath. The base directory of destFilePath should already exist.
+func (g GithubClient) downloadFile(URL, destFilePath string) error {
+	req, err := http.NewRequest(http.MethodGet, URL, nil)
+	if err != nil {
+		return err
+	}
+	if g.token != "" && strings.Contains(URL, "github.com") {
+		req.Header.Add("Authorization", fmt.Sprintf("token %s", g.token))
+	}
+	req.Header.Add("Accept", "application/octet-stream")
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, URL)
+	}
+	f, err := os.Create(destFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return err
+	}
+	return nil
+}
+
 type GithubAsset struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
@@ -301,33 +331,13 @@ func (g GithubRepo) GetTagForLatestRelease() (tagName string, err error) {
 }
 
 func (g GithubRepo) Download(asset GithubAsset) (filePath string, err error) {
-	req, err := http.NewRequest(http.MethodGet, asset.URL, nil)
-	if err != nil {
-		return "", err
-	}
-	if g.client.token != "" {
-		req.Header.Add("Authorization", fmt.Sprintf("token %s", g.client.token))
-	}
-	req.Header.Add("Accept", "application/octet-stream")
-	resp, err := g.client.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, asset.URL)
-	}
 	tempDir, err := os.MkdirTemp(os.TempDir(), callMeProgName+"-")
 	if err != nil {
 		return "", err
 	}
-	filePath = fmt.Sprintf("%s/%s", tempDir, asset.Name)
-	f, err := os.Create(filePath)
+	filePath = filepath.Join(tempDir, asset.Name)
+	err = g.client.downloadFile(asset.URL, filePath)
 	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
 		return "", err
 	}
 	return filePath, nil

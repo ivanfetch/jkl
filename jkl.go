@@ -178,6 +178,15 @@ func (j JKL) Install(specStr string) (installedVersion string, err error) {
 	default:
 		return "", fmt.Errorf("unknown tool provider %q", toolSpec.provider)
 	}
+	if toolSpec.verifyDownload {
+		checksumVerified, err := verifyChecksum(toolSpec.downloadPath, toolSpec.checksumFilePath)
+		if err != nil {
+			return "", err
+		}
+		if !checksumVerified {
+			return "", fmt.Errorf("cannot verify checksum for %s", toolSpec.downloadPath)
+		}
+	}
 	wasExtracted, err := ExtractFile(toolSpec.downloadPath)
 	if err != nil {
 		return "", err
