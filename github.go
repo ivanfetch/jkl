@@ -27,6 +27,9 @@ func GithubDownload(TS *ToolSpec) error {
 	if err != nil {
 		return err
 	}
+	if TS.verifyDownload {
+		// marker
+	}
 	TS.name = downloadName
 	TS.version = downloadVersion
 	TS.downloadPath = downloadPath
@@ -433,6 +436,8 @@ func (g GithubRepo) DownloadReleaseForTagOSAndArch(tag, OS, arch string) (filePa
 	if err != nil {
 		return "", "", err
 	}
+	checksumsAsset, ok := matchAssetProvidingChecksums(assets)
+	// return filePath, asset.NameWithoutVersionAndComponents(matchedOS, matchedArch, checksumsAsset, tag), nil
 	return filePath, asset.NameWithoutVersionAndComponents(matchedOS, matchedArch, tag), nil
 }
 
@@ -487,7 +492,6 @@ func (g GithubRepo) DownloadExternalAsset(URL string) (filePath string, err erro
 	debugLog.Printf("downloaded %s to %s", URL, filePath)
 	return filePath, nil
 }
-
 func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (matchedAsset GithubAsset, matchedOS, matchedArch string, successfulMatch bool) {
 	for _, asset := range assets {
 		matchedOS, foundOS := stringContainsOneOf(asset.Name, OS, getAliasesForOperatingSystem(OS)...)
@@ -508,4 +512,14 @@ func MatchAssetByOsAndArch(assets []GithubAsset, OS, arch string) (matchedAsset 
 		return MatchAssetByOsAndArch(assets, OS, "amd64")
 	}
 	return GithubAsset{}, "", "", false
+}
+
+func matchAssetProvidingChecksums(assets []GithubAsset) (matchedAsset GithubAsset, foundmatch bool) {
+	for _, asset := range assets {
+		if strings.HasSuffix(strings.ToLower(asset.Name), "checksum.txt") || strings.HasSuffix(strings.ToLower(asset.Name), "checksums.txt") {
+			debugLog.Printf("matched this asset as providing checksums: %v", asset)
+			return asset, true
+		}
+	}
+	return GithubAsset{}, false
 }
